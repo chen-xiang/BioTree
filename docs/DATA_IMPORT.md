@@ -27,8 +27,8 @@ curl -L -o data/import/col_latest_dwca.zip \
 | 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN` |
 | 外部 ID | 写入 `taxon.external_source=col` + `taxon.external_id` |
 | replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media`（管理员账号保留） |
-| 写入路径 | 按等级排序后 **JDBC 批量 INSERT**（可配置 `commit-batch-size`）+ 批量回写 `materialized_path`；每批独立事务 |
-| 断点续跑 | `import_checkpoint` 记录阶段与进度；`resume=true` 时跳过已写入 external_id，中断后可续跑（勿再 `replace=true`） |
+| 写入路径 | **暂存表流式写入**（`import_col_*`）后按等级落库；JVM 不常驻全量节点 Map |
+| 断点续跑 | `import_checkpoint` 记录 STAGE / RANK_* / VERNACULAR / SYNONYM；`GET /api/admin/import/status` 可查 |
 | 异名 | 导入非 accepted 且带 `acceptedNameUsageID` 的记录到 `taxon_synonym` |
 | child_count | 导入结束按 `parent_id` 分组批量回写 |
 

@@ -30,7 +30,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, IllegalArgumentException.class})
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex) {
         log.warn("Bad request: {}", ex.getMessage());
-        return ResponseEntity.badRequest().body(ApiResponse.fail(ErrorCode.BAD_REQUEST, ex.getMessage()));
+        // 不把内部校验细节直接回传；统一文案
+        return ResponseEntity.badRequest().body(ApiResponse.fail(ErrorCode.BAD_REQUEST));
     }
 
     @ExceptionHandler(Exception.class)
@@ -40,13 +41,22 @@ public class GlobalExceptionHandler {
     }
 
     private static HttpStatus mapStatus(ErrorCode code) {
-        return switch (code) {
-            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
-            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
-            case FORBIDDEN -> HttpStatus.FORBIDDEN;
-            case NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case CONFLICT -> HttpStatus.CONFLICT;
-            default -> HttpStatus.INTERNAL_SERVER_ERROR;
-        };
+        int value = code.getCode();
+        if (value >= 40000 && value < 40100) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        if (value >= 40100 && value < 40300) {
+            return HttpStatus.UNAUTHORIZED;
+        }
+        if (value >= 40300 && value < 40400) {
+            return HttpStatus.FORBIDDEN;
+        }
+        if (value >= 40400 && value < 40900) {
+            return HttpStatus.NOT_FOUND;
+        }
+        if (value >= 40900 && value < 50000) {
+            return HttpStatus.CONFLICT;
+        }
+        return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

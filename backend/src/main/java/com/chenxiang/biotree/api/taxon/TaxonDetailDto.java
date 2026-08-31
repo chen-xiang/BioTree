@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加异名列表
+ * Updated: 2026-08-31 配图首屏预览 + mediaTotal
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -23,5 +24,6 @@ public record TaxonDetailDto(
         boolean accepted,
         List<TaxonBreadcrumbDto> breadcrumbs,
         List<TaxonMediaDto> media,
+        long mediaTotal,
         List<TaxonSynonymDto> synonyms) {
 }
