@@ -7,7 +7,7 @@
  * Updated: 2026-08-31 详情区展示配图画廊
  * Updated: 2026-08-31 搜索防抖、AbortController、/browse/:id、分页
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
@@ -21,8 +21,10 @@ import TaxonTreeNode from '@/components/taxon/TaxonTreeNode.vue'
 import BtButton from '@/components/ui/BtButton.vue'
 import BtInput from '@/components/ui/BtInput.vue'
 import BtPagination from '@/components/ui/BtPagination.vue'
+import BtVirtualList from '@/components/ui/BtVirtualList.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { debounce } from '@/utils/debounce'
+import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{
   id?: string
@@ -47,6 +49,7 @@ const error = ref('')
 
 const apiLocale = computed(() => localeStore.locale)
 const SEARCH_SIZE = 20
+const descriptionHtml = computed(() => renderMarkdown(detail.value?.description))
 
 let detailAbort: AbortController | null = null
 let searchAbort: AbortController | null = null
@@ -175,16 +178,19 @@ onBeforeUnmount(() => {
     <div v-if="searchHits.length || searching" class="hits">
       <h2>{{ t('browse.searchResults') }}</h2>
       <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
-      <button
-        v-for="hit in searchHits"
-        :key="hit.id"
-        type="button"
-        class="hit"
-        @click="loadDetail(hit.id)"
+      <BtVirtualList
+        v-if="searchHits.length"
+        :items="searchHits"
+        :item-height="56"
+        :height="Math.min(320, Math.max(120, searchHits.length * 56))"
       >
-        <strong>{{ hit.scientificName }}</strong>
-        <span>{{ hit.commonName || hit.rank }}</span>
-      </button>
+        <template #default="{ item }">
+          <button type="button" class="hit" @click="loadDetail(item.id)">
+            <strong>{{ item.scientificName }}</strong>
+            <span>{{ item.commonName || item.rank }}</span>
+          </button>
+        </template>
+      </BtVirtualList>
       <BtPagination
         :page="searchPage"
         :size="SEARCH_SIZE"
@@ -224,7 +230,15 @@ onBeforeUnmount(() => {
           <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
           <p class="meta">{{ detail.rank }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
-          <div v-if="detail.description" class="desc">{{ detail.description }}</div>
+          <div v-if="descriptionHtml" class="desc markdown" v-html="descriptionHtml" />
+          <div v-if="detail.synonyms?.length" class="synonyms">
+            <h3>{{ t('browse.synonyms') }}</h3>
+            <ul>
+              <li v-for="s in detail.synonyms" :key="s.id">
+                <em>{{ s.scientificName }}</em>
+              </li>
+            </ul>
+          </div>
           <div v-if="detail.media.length" class="gallery">
             <figure v-for="m in detail.media" :key="m.id">
               <img :src="m.url" :alt="m.caption || detail.scientificName" loading="lazy" />
@@ -324,8 +338,35 @@ h1 {
 
 .desc {
   margin-top: var(--space-4);
-  white-space: pre-wrap;
   line-height: 1.65;
+}
+
+.desc.markdown :deep(p) {
+  margin: 0 0 var(--space-3);
+}
+
+.desc.markdown :deep(ul) {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.2rem;
+}
+
+.synonyms {
+  margin-top: var(--space-4);
+}
+
+.synonyms h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.synonyms ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.synonyms em {
+  font-style: italic;
 }
 
 .gallery {
@@ -388,20 +429,15 @@ h1 {
   display: flex;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0.7rem 0.9rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.55rem 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
   cursor: pointer;
   text-align: left;
   color: inherit;
-  transition: transform var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
-}
-
-.hit:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-primary);
 }
 
 .error {

@@ -16,3 +16,9 @@ app:
     type: local
     local:
       base-path: ${java.io.tmpdir}/biotree-test-files
+  cache:
+    public-max-age-seconds: 0
+  import:
+    commit-batch-size: 50
+    import-synonyms: true
+    resume: true

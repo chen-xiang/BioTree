@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import BtButton from '@/components/ui/BtButton.vue'
 import { useAuthStore } from '@/stores/auth'
+import { ensureCsrfCookie } from '@/utils/csrf'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -30,6 +31,7 @@ async function onSubmit() {
   loading.value = true
   error.value = ''
   try {
+    await ensureCsrfCookie()
     const response = await fetch('/api/admin/auth/login', {
       method: 'POST',
       credentials: 'include',
@@ -41,6 +43,7 @@ async function onSubmit() {
       throw new Error(body.message || 'login failed')
     }
     auth.setUser(body.data.username)
+    await ensureCsrfCookie()
     await router.push('/admin')
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'login failed'

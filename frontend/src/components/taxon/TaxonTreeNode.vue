@@ -1,9 +1,10 @@
 /**
- * 懒加载分类树节点行（支持子节点分页加载更多）。
+ * 懒加载分类树节点行（支持子节点分页与虚拟滚动）。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 子节点分页与加载更多
+ * Updated: 2026-08-31 子节点较多时使用虚拟列表
  */
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -11,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import type { TaxonListItem } from '@/api/taxon'
 import { fetchChildren } from '@/api/taxon'
 import BtButton from '@/components/ui/BtButton.vue'
+import BtVirtualList from '@/components/ui/BtVirtualList.vue'
 
 const props = defineProps<{
   node: TaxonListItem
@@ -25,6 +27,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const PAGE_SIZE = 40
+const VIRTUAL_THRESHOLD = 40
 
 const expanded = ref(false)
 const loading = ref(false)
@@ -35,6 +38,7 @@ const total = ref(0)
 const loaded = ref(false)
 
 const hasMore = computed(() => children.value.length < total.value)
+const useVirtual = computed(() => children.value.length >= VIRTUAL_THRESHOLD)
 
 async function loadPage(nextPage: number, append: boolean) {
   const result = await fetchChildren(props.node.id, props.locale, nextPage, PAGE_SIZE)
@@ -103,15 +107,33 @@ watch(
     </button>
     <p v-if="loading" class="hint">…</p>
     <div v-if="expanded" class="kids">
-      <TaxonTreeNode
-        v-for="child in children"
-        :key="child.id"
-        :node="child"
-        :depth="depth + 1"
-        :locale="locale"
-        :selected-id="selectedId"
-        @select="emit('select', $event)"
-      />
+      <BtVirtualList
+        v-if="useVirtual"
+        :items="children"
+        :item-height="48"
+        :height="Math.min(360, children.length * 48)"
+      >
+        <template #default="{ item }">
+          <TaxonTreeNode
+            :node="item"
+            :depth="depth + 1"
+            :locale="locale"
+            :selected-id="selectedId"
+            @select="emit('select', $event)"
+          />
+        </template>
+      </BtVirtualList>
+      <template v-else>
+        <TaxonTreeNode
+          v-for="child in children"
+          :key="child.id"
+          :node="child"
+          :depth="depth + 1"
+          :locale="locale"
+          :selected-id="selectedId"
+          @select="emit('select', $event)"
+        />
+      </template>
       <div v-if="hasMore" class="more" :style="{ paddingLeft: `${1.2 + depth * 0.9}rem` }">
         <BtButton variant="ghost" :disabled="loadingMore" @click="loadMore">
           {{ loadingMore ? t('common.loading') : t('browse.loadMore') }}

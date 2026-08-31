@@ -1,8 +1,9 @@
 /**
- * 分类详情 DTO（含当前语言内容与面包屑）。
+ * 分类详情 DTO（含当前语言内容、面包屑与异名）。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 增加异名列表
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -21,5 +22,6 @@ public record TaxonDetailDto(
         int childCount,
         boolean accepted,
         List<TaxonBreadcrumbDto> breadcrumbs,
-        List<TaxonMediaDto> media) {
+        List<TaxonMediaDto> media,
+        List<TaxonSynonymDto> synonyms) {
 }
