@@ -50,6 +50,14 @@ scripts\import-col-full.bat
 2. 确认后执行全量导入（`replace=true`，`max-per-rank=0`）
 3. 导入结束自动退出
 
+**断点续跑（Windows）：**
+
+```bat
+scripts\import-col-resume.bat
+```
+
+在已有 checkpoint 且 zip 仍在时使用；`replace=false` + `resume=true`，勿与全量 replace 混用。
+
 **命令行（Linux / macOS / Windows Git Bash）：**
 
 ```bash
