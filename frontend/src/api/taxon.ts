@@ -154,3 +154,16 @@ export async function deleteTaxonMedia(taxonId: number, mediaId: number): Promis
   })
   unwrap(result)
 }
+
+export async function updateTaxonMedia(
+  taxonId: number,
+  mediaId: number,
+  payload: { caption?: string | null; sortOrder?: number | null },
+): Promise<TaxonMedia> {
+  const result = await apiClient.PUT('/api/admin/taxa/{taxonId}/media/{mediaId}', {
+    params: { path: { taxonId, mediaId } },
+    body: payload,
+    headers: { ...getCsrfHeaders() },
+  })
+  return unwrap(result)
+}

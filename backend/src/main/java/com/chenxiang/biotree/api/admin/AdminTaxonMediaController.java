@@ -1,8 +1,9 @@
 /**
- * 管理端分类配图上传与删除。
+ * 管理端分类配图上传、更新与删除。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 支持更新图注与排序
  */
 package com.chenxiang.biotree.api.admin;
 
@@ -13,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -38,6 +41,15 @@ public class AdminTaxonMediaController {
             @RequestParam(required = false) String license,
             @RequestParam(required = false) String attribution) {
         return ApiResponse.ok(taxonMediaService.upload(taxonId, file, locale, caption, license, attribution));
+    }
+
+    @PutMapping("/{mediaId}")
+    public ApiResponse<TaxonMediaDto> update(
+            @PathVariable Long taxonId,
+            @PathVariable Long mediaId,
+            @RequestBody UpdateTaxonMediaRequest request) {
+        return ApiResponse.ok(
+                taxonMediaService.update(taxonId, mediaId, request.caption(), request.sortOrder()));
     }
 
     @DeleteMapping("/{mediaId}")

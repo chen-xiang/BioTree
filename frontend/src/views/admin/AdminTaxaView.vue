@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * 管理端分类 CRUD 页。
+ * 管理端分类 CRUD 页：搜索跳转、面包屑、移动目标选择、配图图注编辑。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 支持编辑态配图上传与删除
  * Updated: 2026-08-31 支持节点移动与设计系统表单控件
+ * Updated: 2026-08-31 搜索导航、面包屑、任意父移动、图注更新
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,7 +18,9 @@ import {
   fetchTaxonDetail,
   fetchTaxonMedia,
   moveTaxon,
+  searchTaxa,
   updateTaxon,
+  updateTaxonMedia,
   uploadTaxonMedia,
   type TaxonDetail,
   type TaxonListItem,
@@ -32,9 +35,13 @@ import BtTextarea from '@/components/ui/BtTextarea.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToastStore } from '@/stores/toast'
 import { messageFromApiError, rankLabel } from '@/utils/apiError'
+import { debounce } from '@/utils/debounce'
+
+type Crumb = { id: number | null; label: string }
 
 const RANKS: TaxonRank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES']
 const PAGE_SIZE = 30
+const SEARCH_SIZE = 15
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
@@ -42,8 +49,8 @@ const toast = useToastStore()
 const apiLocale = computed(() => localeStore.locale)
 const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rankLabel(rank) })))
 
-const parentId = ref<number | null>(null)
-const parentLabel = ref(t('admin.root'))
+const trail = ref<Crumb[]>([{ id: null, label: t('admin.root') }])
+const parentId = computed(() => trail.value[trail.value.length - 1]?.id ?? null)
 const items = ref<TaxonListItem[]>([])
 const listPage = ref(0)
 const listTotal = ref(0)
@@ -52,9 +59,18 @@ const error = ref('')
 const message = ref('')
 const uploading = ref(false)
 const mediaCaption = ref('')
+const captionDrafts = ref<Record<number, string>>({})
 const confirmOpen = ref(false)
 const confirmKind = ref<'taxon' | 'media'>('taxon')
 const confirmTargetId = ref<number | null>(null)
+
+const searchQuery = ref('')
+const searchHits = ref<TaxonListItem[]>([])
+const searching = ref(false)
+
+const moveQuery = ref('')
+const moveHits = ref<TaxonListItem[]>([])
+const moving = ref(false)
 
 const form = reactive({
   rank: 'KINGDOM' as TaxonRank,
@@ -66,23 +82,34 @@ const form = reactive({
 
 async function loadList(page = 0) {
   error.value = ''
-  const result = await fetchChildren(parentId.value, apiLocale.value, page, PAGE_SIZE)
-  items.value = result.items
-  listPage.value = result.page
-  listTotal.value = result.total
+  try {
+    const result = await fetchChildren(parentId.value, apiLocale.value, page, PAGE_SIZE)
+    items.value = result.items
+    listPage.value = result.page
+    listTotal.value = result.total
+  } catch (e) {
+    error.value = messageFromApiError(e)
+  }
 }
 
-async function openParent(id: number | null, label: string) {
-  parentId.value = id
-  parentLabel.value = label
+async function jumpToCrumb(index: number) {
+  trail.value = trail.value.slice(0, index + 1)
   editing.value = null
   await loadList(0)
 }
 
-async function startEdit(id: number) {
-  const detail = await fetchTaxonDetail(id, apiLocale.value)
+async function enterChild(item: TaxonListItem) {
+  trail.value = [
+    ...trail.value,
+    { id: item.id, label: item.commonName || item.scientificName },
+  ]
+  editing.value = null
+  await loadList(0)
+}
+
+async function hydrateEditing(detail: TaxonDetail) {
   if (detail.mediaTotal > detail.media.length) {
-    const all = await fetchTaxonMedia(id, 0, Math.min(Number(detail.mediaTotal), 100))
+    const all = await fetchTaxonMedia(detail.id, 0, Math.min(Number(detail.mediaTotal), 100))
     editing.value = { ...detail, media: all.items }
   } else {
     editing.value = detail
@@ -93,6 +120,39 @@ async function startEdit(id: number) {
   form.summary = editing.value.summary || ''
   form.description = editing.value.description || ''
   mediaCaption.value = ''
+  captionDrafts.value = Object.fromEntries(
+    (editing.value.media ?? []).map((m) => [m.id, m.caption || '']),
+  )
+}
+
+async function startEdit(id: number) {
+  try {
+    const detail = await fetchTaxonDetail(id, apiLocale.value)
+    await hydrateEditing(detail)
+  } catch (e) {
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
+  }
+}
+
+/** 从搜索结果跳转：定位到其父级列表并打开编辑 */
+async function jumpFromSearch(item: TaxonListItem) {
+  try {
+    const detail = await fetchTaxonDetail(item.id, apiLocale.value)
+    const crumbs: Crumb[] = [{ id: null, label: t('admin.root') }]
+    for (const c of detail.breadcrumbs) {
+      if (c.id === detail.id) continue
+      crumbs.push({ id: c.id, label: c.commonName || c.scientificName })
+    }
+    trail.value = crumbs
+    await loadList(0)
+    await hydrateEditing(detail)
+    searchQuery.value = ''
+    searchHits.value = []
+  } catch (e) {
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
+  }
 }
 
 function resetForm() {
@@ -103,6 +163,9 @@ function resetForm() {
   form.description = ''
   form.rank = parentId.value == null ? 'KINGDOM' : 'PHYLUM'
   mediaCaption.value = ''
+  captionDrafts.value = {}
+  moveQuery.value = ''
+  moveHits.value = []
 }
 
 async function onSubmit() {
@@ -110,13 +173,14 @@ async function onSubmit() {
   message.value = ''
   try {
     if (editing.value) {
-      editing.value = await updateTaxon(editing.value.id, {
+      const updated = await updateTaxon(editing.value.id, {
         scientificName: form.scientificName,
         locale: apiLocale.value,
         commonName: form.commonName,
         summary: form.summary,
         description: form.description,
       })
+      await hydrateEditing(updated)
       message.value = t('admin.updated')
       toast.push(t('admin.updated'), 'ok')
     } else {
@@ -141,21 +205,75 @@ async function onSubmit() {
 }
 
 async function onMoveHere() {
-  if (!editing.value || parentId.value == null) {
-    return
-  }
+  if (!editing.value || parentId.value == null) return
+  await performMove(parentId.value)
+}
+
+async function performMove(targetParentId: number) {
+  if (!editing.value) return
+  moving.value = true
   error.value = ''
   message.value = ''
   try {
-    editing.value = await moveTaxon(editing.value.id, parentId.value, apiLocale.value)
+    const updated = await moveTaxon(editing.value.id, targetParentId, apiLocale.value)
     message.value = t('admin.moved')
     toast.push(t('admin.moved'), 'ok')
-    await loadList(listPage.value)
+    moveQuery.value = ''
+    moveHits.value = []
+    await jumpFromSearch({
+      id: updated.id,
+      rank: updated.rank,
+      scientificName: updated.scientificName,
+      commonName: updated.commonName,
+      childCount: updated.childCount,
+      hasChildren: updated.childCount > 0,
+    })
   } catch (e) {
     error.value = messageFromApiError(e)
     toast.push(error.value, 'error')
+  } finally {
+    moving.value = false
   }
 }
+
+async function runAdminSearch() {
+  const q = searchQuery.value.trim()
+  if (q.length < 2) {
+    searchHits.value = []
+    return
+  }
+  searching.value = true
+  try {
+    const result = await searchTaxa(q, apiLocale.value, 0, SEARCH_SIZE)
+    searchHits.value = result.items
+  } catch (e) {
+    error.value = messageFromApiError(e)
+  } finally {
+    searching.value = false
+  }
+}
+
+const debouncedAdminSearch = debounce(() => {
+  void runAdminSearch()
+}, 320)
+
+async function runMoveSearch() {
+  const q = moveQuery.value.trim()
+  if (q.length < 2) {
+    moveHits.value = []
+    return
+  }
+  try {
+    const result = await searchTaxa(q, apiLocale.value, 0, SEARCH_SIZE)
+    moveHits.value = result.items.filter((h) => h.id !== editing.value?.id)
+  } catch (e) {
+    error.value = messageFromApiError(e)
+  }
+}
+
+const debouncedMoveSearch = debounce(() => {
+  void runMoveSearch()
+}, 320)
 
 function askDeleteTaxon(id: number) {
   confirmKind.value = 'taxon'
@@ -178,9 +296,7 @@ async function onConfirmDelete() {
       await deleteTaxon(id)
       message.value = t('admin.deleted')
       toast.push(t('admin.deleted'), 'ok')
-      if (editing.value?.id === id) {
-        resetForm()
-      }
+      if (editing.value?.id === id) resetForm()
       await loadList(listPage.value)
     } catch (e) {
       error.value = messageFromApiError(e)
@@ -191,7 +307,7 @@ async function onConfirmDelete() {
   if (!editing.value) return
   try {
     await deleteTaxonMedia(editing.value.id, id)
-    editing.value = await fetchTaxonDetail(editing.value.id, apiLocale.value)
+    await startEdit(editing.value.id)
     message.value = t('admin.mediaDeleted')
     toast.push(t('admin.mediaDeleted'), 'ok')
   } catch (e) {
@@ -203,9 +319,7 @@ async function onConfirmDelete() {
 async function onUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !editing.value) {
-    return
-  }
+  if (!file || !editing.value) return
   uploading.value = true
   error.value = ''
   try {
@@ -213,7 +327,7 @@ async function onUpload(event: Event) {
       locale: apiLocale.value,
       caption: mediaCaption.value || undefined,
     })
-    editing.value = await fetchTaxonDetail(editing.value.id, apiLocale.value)
+    await startEdit(editing.value.id)
     message.value = t('admin.mediaUploaded')
     toast.push(t('admin.mediaUploaded'), 'ok')
     mediaCaption.value = ''
@@ -226,12 +340,49 @@ async function onUpload(event: Event) {
   }
 }
 
+async function saveCaption(mediaId: number) {
+  if (!editing.value) return
+  try {
+    const caption = captionDrafts.value[mediaId] ?? ''
+    const updated = await updateTaxonMedia(editing.value.id, mediaId, { caption })
+    editing.value = {
+      ...editing.value,
+      media: editing.value.media.map((m) => (m.id === mediaId ? updated : m)),
+    }
+    toast.push(t('admin.mediaUpdated'), 'ok')
+  } catch (e) {
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
+  }
+}
+
+async function bumpSort(mediaId: number, delta: number) {
+  if (!editing.value) return
+  const media = editing.value.media.find((m) => m.id === mediaId)
+  if (!media) return
+  const next = (media.sortOrder ?? 0) + delta
+  try {
+    const updated = await updateTaxonMedia(editing.value.id, mediaId, { sortOrder: next })
+    const list = editing.value.media
+      .map((m) => (m.id === mediaId ? updated : m))
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    editing.value = { ...editing.value, media: list }
+    toast.push(t('admin.mediaUpdated'), 'ok')
+  } catch (e) {
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
+  }
+}
+
 onMounted(async () => {
   resetForm()
   await loadList(0)
 })
 
 watch(apiLocale, () => loadList(listPage.value))
+watch(searchQuery, () => debouncedAdminSearch())
+watch(moveQuery, () => debouncedMoveSearch())
 </script>
 
 <template>
@@ -241,13 +392,30 @@ watch(apiLocale, () => loadList(listPage.value))
       <p>{{ t('admin.taxaSubtitle') }}</p>
     </header>
 
-    <p class="path">
-      {{ t('admin.currentParent') }}:
-      <button type="button" class="linkish" @click="openParent(null, t('admin.root'))">
-        {{ t('admin.root') }}
-      </button>
-      <span v-if="parentId != null"> / {{ parentLabel }}</span>
-    </p>
+    <div class="search-bar panel">
+      <label>
+        <span>{{ t('admin.searchTaxa') }}</span>
+        <BtInput v-model="searchQuery" :placeholder="t('admin.searchPlaceholder')" />
+      </label>
+      <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
+      <ul v-if="searchHits.length" class="hit-list">
+        <li v-for="hit in searchHits" :key="hit.id">
+          <button type="button" class="linkish" @click="jumpFromSearch(hit)">
+            <strong>{{ hit.scientificName }}</strong>
+            <span>{{ hit.commonName || rankLabel(hit.rank) }}</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <nav class="path" aria-label="breadcrumb">
+      <template v-for="(crumb, index) in trail" :key="`${crumb.id}-${index}`">
+        <span v-if="index > 0"> / </span>
+        <button type="button" class="linkish" @click="jumpToCrumb(index)">
+          {{ crumb.label }}
+        </button>
+      </template>
+    </nav>
 
     <div class="grid">
       <div class="panel">
@@ -264,10 +432,7 @@ watch(apiLocale, () => loadList(listPage.value))
               </button>
             </div>
             <div class="item-actions">
-              <BtButton
-                variant="ghost"
-                @click="openParent(item.id, item.commonName || item.scientificName)"
-              >
+              <BtButton variant="ghost" @click="enterChild(item)">
                 {{ t('admin.enter') }}
               </BtButton>
               <BtButton variant="danger" @click="askDeleteTaxon(item.id)">{{ t('admin.delete') }}</BtButton>
@@ -312,6 +477,7 @@ watch(apiLocale, () => loadList(listPage.value))
             v-if="editing && parentId != null && editing.parentId !== parentId"
             type="button"
             variant="ghost"
+            :disabled="moving"
             @click="onMoveHere"
           >
             {{ t('admin.move') }}
@@ -319,16 +485,36 @@ watch(apiLocale, () => loadList(listPage.value))
         </div>
         <p v-if="editing && parentId != null" class="muted">{{ t('admin.moveHint') }}</p>
 
+        <div v-if="editing" class="move-picker">
+          <h3>{{ t('admin.moveToSearch') }}</h3>
+          <BtInput v-model="moveQuery" :placeholder="t('admin.searchPlaceholder')" />
+          <ul v-if="moveHits.length" class="hit-list">
+            <li v-for="hit in moveHits" :key="hit.id">
+              <button type="button" class="linkish" :disabled="moving" @click="performMove(hit.id)">
+                <strong>{{ hit.scientificName }}</strong>
+                <span>{{ hit.commonName || rankLabel(hit.rank) }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
         <div v-if="editing" class="media-block">
           <h3>{{ t('admin.media') }}</h3>
           <div class="media-grid">
             <figure v-for="m in editing.media" :key="m.id">
               <img :src="m.url" :alt="m.caption || editing.scientificName" loading="lazy" />
               <figcaption>
-                <span>{{ m.caption || t('admin.mediaNoCaption') }}</span>
-                <BtButton type="button" variant="danger" @click="askDeleteMedia(m.id)">
-                  {{ t('admin.delete') }}
-                </BtButton>
+                <BtInput v-model="captionDrafts[m.id]" :placeholder="t('admin.mediaCaption')" />
+                <div class="media-actions">
+                  <BtButton type="button" variant="ghost" @click="saveCaption(m.id)">
+                    {{ t('admin.saveCaption') }}
+                  </BtButton>
+                  <BtButton type="button" variant="ghost" @click="bumpSort(m.id, -1)">↑</BtButton>
+                  <BtButton type="button" variant="ghost" @click="bumpSort(m.id, 1)">↓</BtButton>
+                  <BtButton type="button" variant="danger" @click="askDeleteMedia(m.id)">
+                    {{ t('admin.delete') }}
+                  </BtButton>
+                </div>
               </figcaption>
             </figure>
           </div>
@@ -374,16 +560,9 @@ header h1 {
   font-family: var(--font-display);
 }
 
-header p,
-.muted,
-.path {
+header p {
+  margin: 0;
   color: var(--color-text-muted);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: var(--space-4);
 }
 
 .panel {
@@ -391,7 +570,22 @@ header p,
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
+}
+
+.search-bar label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.path {
+  color: var(--color-text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--space-4);
+  align-items: start;
 }
 
 ul {
@@ -407,41 +601,48 @@ li {
   justify-content: space-between;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.item-main button {
-  display: grid;
-  gap: 0.15rem;
-  text-align: left;
+.item-main {
+  min-width: 0;
 }
 
 .item-actions {
   display: flex;
   gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .linkish {
-  border: none;
-  background: transparent;
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
   color: inherit;
   cursor: pointer;
-  padding: 0;
+}
+
+.linkish span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.hit-list {
+  margin-top: var(--space-3);
 }
 
 .form {
   display: grid;
   gap: var(--space-3);
-  align-content: start;
 }
 
-label {
+.form label {
   display: grid;
   gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }
 
 .actions {
@@ -450,6 +651,7 @@ label {
   gap: var(--space-2);
 }
 
+.move-picker,
 .media-block {
   display: grid;
   gap: var(--space-3);
@@ -457,6 +659,7 @@ label {
   border-top: 1px solid var(--color-border);
 }
 
+.move-picker h3,
 .media-block h3 {
   margin: 0;
   font-size: var(--text-md);
@@ -464,54 +667,50 @@ label {
 
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--space-3);
 }
 
-figure {
+.media-grid figure {
   margin: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--color-bg);
+  display: grid;
+  gap: var(--space-2);
 }
 
-figure img {
-  display: block;
+.media-grid img {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
 }
 
-figcaption {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  font-size: var(--text-xs);
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.muted {
+  color: var(--color-text-muted);
 }
 
 .ok {
-  color: var(--color-primary);
+  color: var(--color-success, #067647);
 }
 
 .error {
-  color: var(--color-danger);
+  color: var(--color-danger, #b42318);
 }
 
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
   }
-}
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  li {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

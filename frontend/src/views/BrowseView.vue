@@ -6,6 +6,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 详情区展示配图画廊
  * Updated: 2026-08-31 搜索防抖、AbortController、/browse/:id、分页
+ * Updated: 2026-08-31 移动端树/详情切换与配图加载更多
  */
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -52,6 +53,7 @@ const error = ref('')
 const gallery = ref<TaxonMedia[]>([])
 const mediaTotal = ref(0)
 const loadingMoreMedia = ref(false)
+const mobilePane = ref<'tree' | 'detail'>('tree')
 
 const apiLocale = computed(() => localeStore.locale)
 const SEARCH_SIZE = 20
@@ -77,6 +79,7 @@ async function loadRoots() {
 
 async function loadDetail(id: number, syncRoute = true) {
   selectedId.value = id
+  mobilePane.value = 'detail'
   if (syncRoute && String(route.params.id ?? '') !== String(id)) {
     await router.replace({ name: 'browse', params: { id: String(id) } })
   }
@@ -131,7 +134,7 @@ async function runSearch(page = 0) {
     searchPage.value = result.page
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
   } finally {
     searching.value = false
   }
@@ -203,6 +206,27 @@ onBeforeUnmount(() => {
 
     <p v-if="error" class="error">{{ error }}</p>
 
+    <div class="mobile-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="mobilePane === 'tree'"
+        :class="{ active: mobilePane === 'tree' }"
+        @click="mobilePane = 'tree'"
+      >
+        {{ t('browse.tree') }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="mobilePane === 'detail'"
+        :class="{ active: mobilePane === 'detail' }"
+        @click="mobilePane = 'detail'"
+      >
+        {{ t('browse.detailTab') }}
+      </button>
+    </div>
+
     <div v-if="searchHits.length || searching" class="hits">
       <h2>{{ t('browse.searchResults') }}</h2>
       <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
@@ -227,8 +251,8 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div class="split">
-      <aside class="tree panel">
+    <div class="split" :data-pane="mobilePane">
+      <aside class="tree panel" :class="{ 'pane-hidden-mobile': mobilePane !== 'tree' }">
         <h2>{{ t('browse.tree') }}</h2>
         <p v-if="loadingRoots" class="muted">{{ t('common.loading') }}</p>
         <TaxonTreeNode
@@ -242,7 +266,7 @@ onBeforeUnmount(() => {
         />
       </aside>
 
-      <article class="detail panel">
+      <article class="detail panel" :class="{ 'pane-hidden-mobile': mobilePane !== 'detail' }">
         <p v-if="loadingDetail" class="muted">{{ t('common.loading') }}</p>
         <template v-else-if="detail">
           <nav class="crumbs">
@@ -477,9 +501,37 @@ h1 {
   color: var(--color-danger);
 }
 
+.mobile-tabs {
+  display: none;
+}
+
 @media (max-width: 860px) {
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+
+  .mobile-tabs button {
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+  }
+
+  .mobile-tabs button.active {
+    color: var(--color-text);
+    border-color: color-mix(in srgb, var(--color-text) 35%, var(--color-border));
+  }
+
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .pane-hidden-mobile {
+    display: none;
   }
 }
 
