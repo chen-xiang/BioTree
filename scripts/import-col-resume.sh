@@ -3,6 +3,7 @@
 # BioTree - Catalogue of Life 断点续跑（不 replace）
 # Author: chen-xiang
 # Created: 2026-08-31
+# Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
 # 用法：./scripts/import-col-resume.sh
 # 前置：已有 checkpoint；DwC-A 包存在；勿与 replace=true 混用
 # =============================================================================
@@ -32,5 +33,5 @@ fi
 
 cd "$BACKEND"
 chmod +x ./gradlew 2>/dev/null || true
-echo "[INFO] Starting resume import (replace=false, resume=true)..."
-exec ./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=false --app.import.resume=true --app.import.max-per-rank=0 --app.import.import-vernaculars=true"
+echo "[INFO] Starting resume import (replace=false, resume=true, rank-mode=full)..."
+exec ./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=false --app.import.resume=true --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"

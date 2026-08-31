@@ -59,7 +59,7 @@ scripts\import-col-full.bat
 脚本会：
 
 1. 若不存在则下载 `data/import/col_latest_dwca.zip`（Windows 路径为 `data\import\...`）
-2. 确认后执行全量导入（`replace=true`，`max-per-rank=0`）
+2. 确认后执行全量导入（`replace=true`，`rank-mode=full`，`max-per-rank=0`，并开启俗名/异名/描述/分布/媒体）
 3. 导入结束自动退出
 
 **断点续跑：**
@@ -82,11 +82,17 @@ cd backend
   --app.import.enabled=true \
   --app.import.dwca-path=../data/import/col_latest_dwca.zip \
   --app.import.replace=true \
+  --app.import.resume=false \
   --app.import.max-per-rank=0 \
-  --app.import.import-vernaculars=true'
+  --app.import.rank-mode=full \
+  --app.import.import-vernaculars=true \
+  --app.import.import-synonyms=true \
+  --app.import.import-descriptions=true \
+  --app.import.import-distributions=true \
+  --app.import.import-media=true'
 ```
 
-导入进程结束后会自动退出。全量可达百万级节点，首次导入耗时取决于磁盘与 MySQL 配置，建议加大 `innodb_buffer_pool_size`。
+导入进程结束后会自动退出。全量可达百万级节点（完整阶元更多），首次导入耗时取决于磁盘与 MySQL 配置，建议加大 `innodb_buffer_pool_size`。
 
 ### 试跑（每级限条数）
 
@@ -108,9 +114,9 @@ cd backend
 - 写入约 1414 个分类节点（界 2 / 门 46 / 纲 166 / 目科属种各 300）
 - 写入约 175 条中英俗名
 
-公开 API `GET /api/taxa/children` 可返回 Animalia / Plantae。
+公开 API `GET /api/taxa/children` 可返回 Animalia / Plantae（默认 `view=simple` 为七级投影）。
 
-全量将 `max-per-rank=0`，节点量约 **200 万+**（仅七级 accepted），请预留磁盘与导入时间。
+全量将 `max-per-rank=0` + `rank-mode=full`，节点量显著高于仅七级，请预留磁盘与导入时间。
 
 ## 4. 配置项
 
@@ -119,9 +125,12 @@ cd backend
 - `enabled`：是否启动即导入  
 - `dwca-path`：zip 路径  
 - `replace`：是否先清空分类数据  
+- `resume`：是否断点续跑  
 - `kingdoms`：界过滤列表  
 - `max-per-rank`：每级上限，`0` 不限制  
-- `import-vernaculars`：是否导入俗名  
+- `rank-mode`：`full`（完整阶元）或 `legacy7`  
+- `import-vernaculars` / `import-synonyms`：俗名与异名  
+- `import-descriptions` / `import-distributions` / `import-media`：DwC 扩展（缺文件则跳过）  
 
 ## 5. 验证
 
@@ -129,12 +138,13 @@ cd backend
 # 公开 API
 curl 'http://localhost:8080/api/taxa/children?locale=zh-CN'
 curl 'http://localhost:8080/api/taxa/search?q=Homo&locale=en'
+curl 'http://localhost:8080/api/stats/summary'
 ```
 
-前端 `/browse` 懒加载树应能从界展开到种；有俗名的节点会显示中文/英文俗名。
+前端 `/browse` 懒加载树应能从界展开；可切换「完整阶元」；有俗名/描述/分布/外链配图时详情区可见。
 
 ## 6. 说明
 
 - Description / Distribution / Media 扩展在 CoL 包内**有则导入**；缺文件则跳过。无 license 的媒体外链会被丢弃。人工编辑的非空 description 不会被导入覆盖。  
 - 同物异名已导入至 `taxon_synonym`（搜索与详情可展示）。  
-- 亚种及更低等级当前跳过，与产品七级模型一致。  
+- 默认完整阶元入库；浏览默认七级投影（`view=simple`）。若只要旧七级数据，设 `rank-mode=legacy7` 后重导。  
