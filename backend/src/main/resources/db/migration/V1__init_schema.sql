@@ -12,7 +12,7 @@ CREATE TABLE admin_user (
 CREATE TABLE taxon (
     id                 BIGINT PRIMARY KEY AUTO_INCREMENT,
     parent_id          BIGINT       NULL,
-    rank               VARCHAR(32)  NOT NULL,
+    taxon_rank         VARCHAR(32)  NOT NULL,
     scientific_name    VARCHAR(255) NOT NULL,
     materialized_path  VARCHAR(768) NOT NULL,
     child_count        INT          NOT NULL DEFAULT 0,

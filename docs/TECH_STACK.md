@@ -215,4 +215,5 @@ BioTree/
 ## 10. 数据与性能
 
 - 分类 / 多语言内容 / 配图如何存储：[DATA_STORAGE.md](./DATA_STORAGE.md)
-- 百万级节点下的加载与展示性能：[PERFORMANCE.md](./PERFORMANCE.md)  
+- 百万级节点下的加载与展示性能：[PERFORMANCE.md](./PERFORMANCE.md)
+- Catalogue of Life 真实数据导入：[DATA_IMPORT.md](./DATA_IMPORT.md)  
