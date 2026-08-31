@@ -1,11 +1,12 @@
 /**
- * Spring Security 配置：公开只读，管理端需 Session 登录。
+ * Spring Security 配置：公开只读，管理端需 Session 登录；写操作启用 Cookie CSRF。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 调整规则顺序，确保 /api/admin/** 需登录
  * Updated: 2026-08-31 放行本地配图静态路径 /files/**
  * Updated: 2026-08-31 Session 固定攻击防护与登出清理
+ * Updated: 2026-08-31 管理端写操作启用 Cookie CSRF
  */
 package com.chenxiang.biotree.security;
 
@@ -24,6 +25,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 @EnableWebSecurity
@@ -31,8 +34,14 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        // 前后端同站 + SameSite=Lax Cookie；CSRF 在同站 SPA 下可后续以 Cookie token 方式开启
-        http.csrf(csrf -> csrf.disable())
+        CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+        // 兼容 SPA：允许从 Cookie 头读取 token，不强制请求体参数
+        requestHandler.setCsrfRequestAttributeName(null);
+
+        http.csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRequestHandler(requestHandler)
+                        .ignoringRequestMatchers("/api/admin/auth/login", "/api/health", "/actuator/health"))
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
@@ -55,7 +64,7 @@ public class SecurityConfig {
                 .logout(logout -> logout
                         .logoutUrl("/api/admin/auth/logout")
                         .invalidateHttpSession(true)
-                        .deleteCookies("BIOTREESESSION")
+                        .deleteCookies("BIOTREESESSION", "XSRF-TOKEN")
                         .logoutSuccessHandler((request, response, authentication) -> {
                             response.setStatus(HttpServletResponse.SC_OK);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);

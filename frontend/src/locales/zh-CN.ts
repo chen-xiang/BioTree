@@ -36,6 +36,7 @@ export default {
     selectHint: '从左侧选择一个分类单元查看详情。',
     childrenCount: '{n} 个子节点',
     loadMore: '加载更多',
+    synonyms: '异名',
   },
   theme: {
     light: '浅色',

@@ -6,6 +6,7 @@
  * Updated: 2026-08-31 增加配图上传与删除接口
  * Updated: 2026-08-31 支持 AbortSignal、节点移动
  */
+import { getCsrfHeaders } from '@/utils/csrf'
 import type { ApiResponse } from './client'
 
 export type TaxonRank =
@@ -66,6 +67,12 @@ export type TaxonDetail = {
   accepted: boolean
   breadcrumbs: TaxonBreadcrumb[]
   media: TaxonMedia[]
+  synonyms: TaxonSynonym[]
+}
+
+export type TaxonSynonym = {
+  id: number
+  scientificName: string
 }
 
 export type CreateTaxonPayload = {
@@ -145,7 +152,7 @@ export async function createTaxon(payload: CreateTaxonPayload): Promise<TaxonDet
   const response = await fetch('/api/admin/taxa', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
     body: JSON.stringify(payload),
   })
   return (await parseJson<TaxonDetail>(response)).data
@@ -155,7 +162,7 @@ export async function updateTaxon(id: number, payload: UpdateTaxonPayload): Prom
   const response = await fetch(`/api/admin/taxa/${id}`, {
     method: 'PUT',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
     body: JSON.stringify(payload),
   })
   return (await parseJson<TaxonDetail>(response)).data
@@ -168,7 +175,7 @@ export async function moveTaxon(id: number, newParentId: number, locale?: string
   const response = await fetch(`/api/admin/taxa/${id}/move${qs ? `?${qs}` : ''}`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
     body: JSON.stringify({ newParentId }),
   })
   return (await parseJson<TaxonDetail>(response)).data
@@ -178,6 +185,7 @@ export async function deleteTaxon(id: number): Promise<void> {
   const response = await fetch(`/api/admin/taxa/${id}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { ...getCsrfHeaders() },
   })
   await parseJson<null>(response)
 }
@@ -196,6 +204,7 @@ export async function uploadTaxonMedia(
   const response = await fetch(`/api/admin/taxa/${taxonId}/media`, {
     method: 'POST',
     credentials: 'include',
+    headers: { ...getCsrfHeaders() },
     body: form,
   })
   return (await parseJson<TaxonMedia>(response)).data
@@ -205,6 +214,7 @@ export async function deleteTaxonMedia(taxonId: number, mediaId: number): Promis
   const response = await fetch(`/api/admin/taxa/${taxonId}/media/${mediaId}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { ...getCsrfHeaders() },
   })
   await parseJson<null>(response)
 }

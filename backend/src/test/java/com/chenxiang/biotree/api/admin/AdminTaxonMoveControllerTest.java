@@ -3,9 +3,11 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 适配 Cookie CSRF
  */
 package com.chenxiang.biotree.api.admin;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,8 +34,8 @@ class AdminTaxonMoveControllerTest {
 
     @Test
     void shouldMoveSpeciesUnderSiblingGenus() throws Exception {
-        // 在 Hominidae(6) 下新建姊妹属 Pan，再把 Homo sapiens(8) 从 Homo(7) 移到 Pan
         String createGenus = mockMvc.perform(post("/api/admin/taxa")
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -47,6 +49,7 @@ class AdminTaxonMoveControllerTest {
         long panId = Long.parseLong(createGenus.replaceAll("(?s).*\"id\":(\\d+).*", "$1"));
 
         mockMvc.perform(post("/api/admin/taxa/{id}/move", 8)
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"newParentId\":" + panId + "}"))
@@ -62,6 +65,7 @@ class AdminTaxonMoveControllerTest {
     @Test
     void shouldRejectMoveUnderDescendant() throws Exception {
         mockMvc.perform(post("/api/admin/taxa/{id}/move", 7)
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"newParentId\":8}"))

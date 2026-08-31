@@ -27,7 +27,9 @@ curl -L -o data/import/col_latest_dwca.zip \
 | 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN` |
 | 外部 ID | 写入 `taxon.external_source=col` + `taxon.external_id` |
 | replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media`（管理员账号保留） |
-| 写入路径 | 按等级排序后 **JDBC 批量 INSERT**（默认 500/批）+ 批量回写 `materialized_path`；俗名批量 upsert |
+| 写入路径 | 按等级排序后 **JDBC 批量 INSERT**（可配置 `commit-batch-size`）+ 批量回写 `materialized_path`；每批独立事务 |
+| 断点续跑 | `import_checkpoint` 记录阶段与进度；`resume=true` 时跳过已写入 external_id，中断后可续跑（勿再 `replace=true`） |
+| 异名 | 导入非 accepted 且带 `acceptedNameUsageID` 的记录到 `taxon_synonym` |
 | child_count | 导入结束按 `parent_id` 分组批量回写 |
 
 ## 3. 运行导入
@@ -110,5 +112,5 @@ curl 'http://localhost:8080/api/taxa/search?q=Homo&locale=en'
 ## 6. 说明
 
 - 详细介绍（长描述）与配图不在 CoL DwC-A 默认核心中，需后续运营补录或另接数据源。  
-- 同物异名未导入（仅 accepted）。  
+- 同物异名已导入至 `taxon_synonym`（搜索与详情可展示）。  
 - 亚种及更低等级当前跳过，与产品七级模型一致。  

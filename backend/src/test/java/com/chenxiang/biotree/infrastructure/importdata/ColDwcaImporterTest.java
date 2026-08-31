@@ -47,12 +47,16 @@ class ColDwcaImporterTest {
 
         ImportProperties properties = new ImportProperties();
         properties.setReplace(true);
+        properties.setResume(false);
         properties.setImportVernaculars(true);
+        properties.setImportSynonyms(true);
+        properties.setCommitBatchSize(50);
         properties.setKingdoms(List.of("Animalia", "Plantae"));
 
         ColDwcaImporter.ImportStats stats = importer.importArchive(zip, properties);
         assertTrue(stats.taxonCount() >= 8);
         assertTrue(stats.vernacularCount() >= 2);
+        assertTrue(stats.synonymCount() >= 1);
 
         Integer kingdoms = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'KINGDOM'", Integer.class);
@@ -81,6 +85,8 @@ class ColDwcaImporterTest {
         taxa.append("GE1\tFA1\t\t\t\t\taccepted\tgenus\tHomo Linnaeus, 1758\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
         taxa.append(
                 "SP1\tGE1\t\t\t\t\taccepted\tspecies\tHomo sapiens Linnaeus, 1758\t\t\tHomo\t\tsapiens\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append(
+                "SP1S\tGE1\tSP1\t\t\t\tsynonym\tspecies\tHomo sapien\t\t\tHomo\t\tsapien\t\t\t\t\t\t\tAnimalia\n");
         taxa.append("PH2\tP\t\t\t\t\taccepted\tphylum\tMagnoliophyta\t\t\t\t\t\t\t\t\t\t\t\tPlantae\n");
 
         String vernacular =
