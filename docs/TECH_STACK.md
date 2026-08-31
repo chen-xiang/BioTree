@@ -208,4 +208,11 @@ BioTree/
 
 ## 9. 开发规范
 
-编码、文件头、测试、UI 与变更策略见 [CODING_RULES.md](./CODING_RULES.md)（Cursor 同步规则：`.cursor/rules/biotree-basics.mdc`）。  
+编码、文件头、测试、UI 与变更策略见 [CODING_RULES.md](./CODING_RULES.md)（Cursor 同步规则：`.cursor/rules/biotree-basics.mdc`）。
+
+---
+
+## 10. 数据与性能
+
+- 分类 / 多语言内容 / 配图如何存储：[DATA_STORAGE.md](./DATA_STORAGE.md)
+- 百万级节点下的加载与展示性能：[PERFORMANCE.md](./PERFORMANCE.md)  
