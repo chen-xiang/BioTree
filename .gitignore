@@ -1,0 +1,54 @@
+# 构建与 IDE
+.gradle/
+build/
+out/
+bin/
+*.class
+*.jar
+*.war
+*.iml
+.idea/
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+.vscode/*
+!.vscode/extensions.json
+
+# 保留 Gradle Wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# Node / 前端
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+.npm
+.pnpm-store/
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+frontend/.env.local
+application-local.yml
+**/application-secret.yml
+
+# 本地文件存储与数据
+data/
+backend/data/
+*.log
+logs/
+
+# 系统与杂项
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 测试与覆盖率
+coverage/
+.nyc_output/
+**/jacoco/
