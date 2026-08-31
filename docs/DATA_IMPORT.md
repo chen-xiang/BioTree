@@ -1,6 +1,8 @@
 # 真实分类数据导入（Catalogue of Life）
 
-本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界的界门纲目科属种数据及中英俗名。
+本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界分类数据及俗名。
+
+> **演进**：当前实现以七级 accepted 为主；完整阶元入库、默认七级视图投影及 DwC 字段补齐见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)。
 
 ## 1. 数据源
 
