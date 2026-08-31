@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 增加配图上传与删除接口
  */
 import type { ApiResponse } from './client'
 
@@ -38,6 +39,19 @@ export type TaxonBreadcrumb = {
   commonName: string | null
 }
 
+export type TaxonMedia = {
+  id: number
+  url: string
+  mimeType: string | null
+  width?: number | null
+  height?: number | null
+  sortOrder?: number
+  locale?: string | null
+  caption: string | null
+  license?: string | null
+  attribution?: string | null
+}
+
 export type TaxonDetail = {
   id: number
   parentId: number | null
@@ -50,12 +64,7 @@ export type TaxonDetail = {
   childCount: number
   accepted: boolean
   breadcrumbs: TaxonBreadcrumb[]
-  media: Array<{
-    id: number
-    url: string
-    mimeType: string | null
-    caption: string | null
-  }>
+  media: TaxonMedia[]
 }
 
 export type CreateTaxonPayload = {
@@ -147,6 +156,33 @@ export async function updateTaxon(id: number, payload: UpdateTaxonPayload): Prom
 
 export async function deleteTaxon(id: number): Promise<void> {
   const response = await fetch(`/api/admin/taxa/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  await parseJson<null>(response)
+}
+
+export async function uploadTaxonMedia(
+  taxonId: number,
+  file: File,
+  options?: { locale?: string; caption?: string; license?: string; attribution?: string },
+): Promise<TaxonMedia> {
+  const form = new FormData()
+  form.append('file', file)
+  if (options?.locale) form.append('locale', options.locale)
+  if (options?.caption) form.append('caption', options.caption)
+  if (options?.license) form.append('license', options.license)
+  if (options?.attribution) form.append('attribution', options.attribution)
+  const response = await fetch(`/api/admin/taxa/${taxonId}/media`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
+  return (await parseJson<TaxonMedia>(response)).data
+}
+
+export async function deleteTaxonMedia(taxonId: number, mediaId: number): Promise<void> {
+  const response = await fetch(`/api/admin/taxa/${taxonId}/media/${mediaId}`, {
     method: 'DELETE',
     credentials: 'include',
   })

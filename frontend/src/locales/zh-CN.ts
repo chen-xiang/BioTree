@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 补充浏览与管理分类文案
+ * Updated: 2026-08-31 补充配图管理文案
  */
 export default {
   common: {
@@ -65,6 +66,13 @@ export default {
     updated: '已更新',
     deleted: '已删除',
     confirmDelete: '确认删除该分类？',
+    media: '配图',
+    mediaCaption: '图注',
+    mediaHint: '支持 jpeg/png/webp/gif，最大 5MB。',
+    mediaNoCaption: '无图注',
+    mediaUploaded: '配图已上传',
+    mediaDeleted: '配图已删除',
+    confirmDeleteMedia: '确认删除该配图？',
   },
   login: {
     title: '管理员登录',

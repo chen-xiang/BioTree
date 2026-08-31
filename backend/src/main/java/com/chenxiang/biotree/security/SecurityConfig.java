@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 调整规则顺序，确保 /api/admin/** 需登录
+ * Updated: 2026-08-31 放行本地配图静态路径 /files/**
  */
 package com.chenxiang.biotree.security;
 
@@ -34,6 +35,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/api/health").permitAll()
+                        .requestMatchers("/files/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/admin/auth/login").permitAll()
                         .requestMatchers("/api/admin/**").authenticated()

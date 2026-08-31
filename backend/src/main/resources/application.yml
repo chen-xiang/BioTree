@@ -18,6 +18,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
   servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
     session:
       cookie:
         name: BIOTREESESSION

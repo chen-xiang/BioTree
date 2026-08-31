@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 Add browse and admin taxon copy
+ * Updated: 2026-08-31 Add media management copy
  */
 export default {
   common: {
@@ -65,6 +66,13 @@ export default {
     updated: 'Updated',
     deleted: 'Deleted',
     confirmDelete: 'Delete this taxon?',
+    media: 'Media',
+    mediaCaption: 'Caption',
+    mediaHint: 'jpeg/png/webp/gif, max 5MB.',
+    mediaNoCaption: 'No caption',
+    mediaUploaded: 'Media uploaded',
+    mediaDeleted: 'Media deleted',
+    confirmDeleteMedia: 'Delete this image?',
   },
   login: {
     title: 'Admin sign in',

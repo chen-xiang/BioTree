@@ -4,6 +4,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 详情区展示配图画廊
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -150,6 +151,12 @@ watch(apiLocale, async () => {
           <p class="meta">{{ detail.rank }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
           <div v-if="detail.description" class="desc">{{ detail.description }}</div>
+          <div v-if="detail.media.length" class="gallery">
+            <figure v-for="m in detail.media" :key="m.id">
+              <img :src="m.url" :alt="m.caption || detail.scientificName" loading="lazy" />
+              <figcaption v-if="m.caption">{{ m.caption }}</figcaption>
+            </figure>
+          </div>
         </template>
         <p v-else class="muted">{{ t('browse.selectHint') }}</p>
       </article>
@@ -245,6 +252,35 @@ h1 {
   margin-top: var(--space-4);
   white-space: pre-wrap;
   line-height: 1.65;
+}
+
+.gallery {
+  margin-top: var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.gallery figure {
+  margin: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  animation: rise var(--duration-normal) var(--ease-out);
+}
+
+.gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.gallery figcaption {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 
 .crumbs {
