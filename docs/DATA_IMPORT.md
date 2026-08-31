@@ -2,7 +2,7 @@
 
 本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界分类数据及俗名。
 
-> **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。命名人等 DwC 补齐见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)。
+> **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。另可导入 Description / Distribution / Media 扩展与命名学字段（见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)）。
 
 ## 1. 数据源
 
@@ -25,12 +25,16 @@ curl -L -o data/import/col_latest_dwca.zip \
 | 过滤 | 仅 `taxonomicStatus=accepted`，且 `kingdom` 为配置的界（默认 Animalia、Plantae） |
 | 等级 | 默认完整阶元（亚门/亚科/亚属/亚种等）；`rank-mode=legacy7` 时仅七级 |
 | 父级 | full：按真实 `parentNameUsageID` 挂接；legacy7：中间级上溯到已入库七级 |
-| 学名 | 种优先 `genericName + specificEpithet`；写入 `scientific_name_authorship`（若有） |
-| 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN`，并扩展部分其它语言码 |
+| 学名 | 种/种下用属名+加词拼规范名；写入命名人、原文名、`namePublishedIn`、命名法字段（有则） |
+| 俗名 | `VernacularName.tsv`：多语言 + `isPreferredName`；写入 `taxon_i18n` |
+| 描述 | `Description.tsv`（有则）→ `taxon_i18n.description`（不覆盖已有非空） |
+| 分布 | `Distribution.tsv`（有则）→ `taxon_distribution` |
+| 媒体 | `Media.tsv`/`Multimedia.tsv`（有则）外链；**须可识别 license** |
+| 数据集 | `eml.xml` 标题/版本 → `import_dataset_meta`（页脚/管理端引用） |
 | 外部 ID | 写入 `taxon.external_source=col` + `taxon.external_id` |
-| replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media`（管理员账号保留） |
+| replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media` / `taxon_distribution`（管理员账号保留） |
 | 写入路径 | **暂存表流式写入**（`import_col_*`）后按等级落库；JVM 不常驻全量节点 Map |
-| 断点续跑 | `import_checkpoint` 记录 STAGE / RANK_* / VERNACULAR / SYNONYM；`GET /api/admin/import/status` 可查 |
+| 断点续跑 | `import_checkpoint` 记录 STAGE / RANK_* / VERNACULAR / SYNONYM / DESCRIPTIONS…；`GET /api/admin/import/status` 可查 |
 | 异名 | 导入非 accepted 且带 `acceptedNameUsageID` 的记录到 `taxon_synonym` |
 | child_count | 导入结束按 `parent_id` 分组批量回写 |
 
@@ -131,6 +135,6 @@ curl 'http://localhost:8080/api/taxa/search?q=Homo&locale=en'
 
 ## 6. 说明
 
-- 详细介绍（长描述）与配图不在 CoL DwC-A 默认核心中，需后续运营补录或另接数据源。  
+- Description / Distribution / Media 扩展在 CoL 包内**有则导入**；缺文件则跳过。无 license 的媒体外链会被丢弃。人工编辑的非空 description 不会被导入覆盖。  
 - 同物异名已导入至 `taxon_synonym`（搜索与详情可展示）。  
 - 亚种及更低等级当前跳过，与产品七级模型一致。  

@@ -29,8 +29,11 @@ public class TaxonMedia {
     @JoinColumn(name = "taxon_id", nullable = false)
     private Taxon taxon;
 
-    @Column(name = "storage_key", nullable = false, length = 512)
+    @Column(name = "storage_key", length = 512)
     private String storageKey;
+
+    @Column(name = "source_url", length = 1024)
+    private String sourceUrl;
 
     @Column(name = "mime_type", length = 128)
     private String mimeType;
@@ -84,6 +87,14 @@ public class TaxonMedia {
 
     public void setStorageKey(String storageKey) {
         this.storageKey = storageKey;
+    }
+
+    public String getSourceUrl() {
+        return sourceUrl;
+    }
+
+    public void setSourceUrl(String sourceUrl) {
+        this.sourceUrl = sourceUrl;
     }
 
     public String getMimeType() {

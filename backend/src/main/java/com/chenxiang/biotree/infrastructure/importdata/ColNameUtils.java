@@ -40,14 +40,30 @@ public final class ColNameUtils {
     }
 
     /**
-     * 生成规范学名：种用属名+种加词；其余尽量去掉命名人信息。
+     * 生成规范学名：种用属名+种加词；种下阶元附加种下加词；其余尽量去掉命名人信息。
      */
     public static String canonicalName(
             TaxonRank rank, String scientificName, String genericName, String specificEpithet) {
-        if ((rank == TaxonRank.SPECIES || rank == TaxonRank.SUBSPECIES)
+        return canonicalName(rank, scientificName, genericName, specificEpithet, null);
+    }
+
+    public static String canonicalName(
+            TaxonRank rank,
+            String scientificName,
+            String genericName,
+            String specificEpithet,
+            String infraspecificEpithet) {
+        if ((rank == TaxonRank.SPECIES
+                        || rank == TaxonRank.SUBSPECIES
+                        || rank == TaxonRank.VARIETY
+                        || rank == TaxonRank.FORM)
                 && StringUtils.hasText(genericName)
                 && StringUtils.hasText(specificEpithet)) {
-            return genericName.trim() + " " + specificEpithet.trim();
+            String base = genericName.trim() + " " + specificEpithet.trim();
+            if (rank != TaxonRank.SPECIES && StringUtils.hasText(infraspecificEpithet)) {
+                return base + " " + infraspecificEpithet.trim();
+            }
+            return base;
         }
         if ((rank == TaxonRank.GENUS || rank == TaxonRank.SUBGENUS) && StringUtils.hasText(genericName)) {
             return genericName.trim();

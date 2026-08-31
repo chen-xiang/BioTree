@@ -40,6 +40,15 @@ public class ImportProperties {
     /** 是否导入异名（acceptedNameUsageID 指向已导入接受名）。 */
     private boolean importSynonyms = true;
 
+    /** 是否导入 Description 扩展到 taxon_i18n（不覆盖已有非空 description）。 */
+    private boolean importDescriptions = true;
+
+    /** 是否导入 Distribution 扩展。 */
+    private boolean importDistributions = true;
+
+    /** 是否导入 Multimedia/Media 外链（须含 license）。 */
+    private boolean importMedia = true;
+
     /** 每批提交的插入条数（小事务，便于断点）。 */
     private int commitBatchSize = 500;
 
@@ -113,6 +122,30 @@ public class ImportProperties {
 
     public void setImportSynonyms(boolean importSynonyms) {
         this.importSynonyms = importSynonyms;
+    }
+
+    public boolean isImportDescriptions() {
+        return importDescriptions;
+    }
+
+    public void setImportDescriptions(boolean importDescriptions) {
+        this.importDescriptions = importDescriptions;
+    }
+
+    public boolean isImportDistributions() {
+        return importDistributions;
+    }
+
+    public void setImportDistributions(boolean importDistributions) {
+        this.importDistributions = importDistributions;
+    }
+
+    public boolean isImportMedia() {
+        return importMedia;
+    }
+
+    public void setImportMedia(boolean importMedia) {
+        this.importMedia = importMedia;
     }
 
     public int getCommitBatchSize() {

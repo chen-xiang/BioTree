@@ -69,6 +69,19 @@ onMounted(async () => {
       </ul>
     </div>
 
+    <div v-if="stats?.dataset" class="dataset">
+      <h2>{{ t('admin.datasetSource') }}</h2>
+      <p>
+        <strong>{{ stats.dataset.title || 'Catalogue of Life' }}</strong>
+        <span v-if="stats.dataset.version"> · {{ stats.dataset.version }}</span>
+      </p>
+      <p v-if="stats.dataset.sourceUrl" class="muted">
+        <a :href="stats.dataset.sourceUrl" target="_blank" rel="noopener noreferrer">
+          {{ stats.dataset.sourceUrl }}
+        </a>
+      </p>
+    </div>
+
     <div v-if="importStatus" class="import">
       <h2>{{ t('admin.importStatus') }}</h2>
       <p>

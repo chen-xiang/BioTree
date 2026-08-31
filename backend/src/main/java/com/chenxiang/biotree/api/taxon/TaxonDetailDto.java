@@ -1,10 +1,11 @@
 /**
- * 分类详情 DTO（含当前语言内容、面包屑与异名）。
+ * 分类详情 DTO（含当前语言内容、面包屑、异名、分布与多语言俗名）。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加异名列表
  * Updated: 2026-08-31 配图首屏预览 + mediaTotal
+ * Updated: 2026-08-31 DwC 命名学元数据、分布、多语言俗名
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -17,6 +18,11 @@ public record TaxonDetailDto(
         TaxonRank rank,
         String scientificName,
         String scientificNameAuthorship,
+        String scientificNameVerbatim,
+        String namePublishedIn,
+        String nameAccordingTo,
+        String nomenclaturalCode,
+        String nomenclaturalStatus,
         String commonName,
         String summary,
         String description,
@@ -27,5 +33,7 @@ public record TaxonDetailDto(
         List<TaxonMediaDto> media,
         long mediaTotal,
         List<TaxonSynonymDto> synonyms,
-        String rankRaw) {
+        String rankRaw,
+        List<TaxonVernacularDto> vernaculars,
+        List<TaxonDistributionDto> distributions) {
 }

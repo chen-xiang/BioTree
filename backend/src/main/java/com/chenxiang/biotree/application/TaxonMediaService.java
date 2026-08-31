@@ -105,7 +105,9 @@ public class TaxonMediaService {
         if (!media.getTaxon().getId().equals(taxonId)) {
             throw new BusinessException(ErrorCode.MEDIA_NOT_FOUND);
         }
-        storageService.delete(media.getStorageKey());
+        if (StringUtils.hasText(media.getStorageKey())) {
+            storageService.delete(media.getStorageKey());
+        }
         taxonMediaRepository.delete(media);
         log.info("Deleted media id={} taxonId={}", mediaId, taxonId);
     }
@@ -146,9 +148,17 @@ public class TaxonMediaService {
     }
 
     private TaxonMediaDto toDto(TaxonMedia media) {
+        String url;
+        if (StringUtils.hasText(media.getSourceUrl())) {
+            url = media.getSourceUrl();
+        } else if (StringUtils.hasText(media.getStorageKey())) {
+            url = storageService.resolveUrl(media.getStorageKey());
+        } else {
+            url = "";
+        }
         return new TaxonMediaDto(
                 media.getId(),
-                storageService.resolveUrl(media.getStorageKey()),
+                url,
                 media.getMimeType(),
                 media.getWidth(),
                 media.getHeight(),
