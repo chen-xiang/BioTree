@@ -1,6 +1,6 @@
 -- 演示分类树：动物界 / 植物界各一条到种的链路，便于联调
 
-INSERT INTO taxon (id, parent_id, rank, scientific_name, materialized_path, child_count, is_accepted) VALUES
+INSERT INTO taxon (id, parent_id, taxon_rank, scientific_name, materialized_path, child_count, is_accepted) VALUES
 (1, NULL, 'KINGDOM', 'Animalia', '/1/', 1, 1),
 (2, NULL, 'KINGDOM', 'Plantae', '/2/', 1, 1),
 (3, 1, 'PHYLUM', 'Chordata', '/1/3/', 1, 1),

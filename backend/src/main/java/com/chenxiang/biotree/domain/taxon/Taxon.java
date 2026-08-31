@@ -3,6 +3,8 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 增加外部数据源 ID 字段以支持权威库导入
+ * Updated: 2026-08-31 列名改为 taxon_rank 以兼容 MySQL 保留字
  */
 package com.chenxiang.biotree.domain.taxon;
 
@@ -32,7 +34,7 @@ public class Taxon {
     private Taxon parent;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
+    @Column(name = "taxon_rank", nullable = false, length = 32)
     private TaxonRank rank;
 
     @Column(name = "scientific_name", nullable = false, length = 255)
@@ -55,6 +57,12 @@ public class Taxon {
 
     @Column(name = "created_by", length = 64)
     private String createdBy;
+
+    @Column(name = "external_source", length = 32)
+    private String externalSource;
+
+    @Column(name = "external_id", length = 64)
+    private String externalId;
 
     public Long getId() {
         return id;
@@ -134,5 +142,21 @@ public class Taxon {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public String getExternalSource() {
+        return externalSource;
+    }
+
+    public void setExternalSource(String externalSource) {
+        this.externalSource = externalSource;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
     }
 }

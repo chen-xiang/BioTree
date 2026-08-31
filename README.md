@@ -8,6 +8,7 @@
 - 开发规范：[docs/CODING_RULES.md](docs/CODING_RULES.md)
 - 数据存储：[docs/DATA_STORAGE.md](docs/DATA_STORAGE.md)
 - 性能设计：[docs/PERFORMANCE.md](docs/PERFORMANCE.md)
+- 真实数据导入：[docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)
 
 ## 工程结构
 
