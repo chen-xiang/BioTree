@@ -293,6 +293,11 @@ export interface components {
             rank: components["schemas"]["TaxonRank"];
             scientificName: string;
             scientificNameAuthorship?: string | null;
+            scientificNameVerbatim?: string | null;
+            namePublishedIn?: string | null;
+            nameAccordingTo?: string | null;
+            nomenclaturalCode?: string | null;
+            nomenclaturalStatus?: string | null;
             commonName?: string | null;
             summary?: string | null;
             description?: string | null;
@@ -305,6 +310,22 @@ export interface components {
             mediaTotal: number;
             synonyms: components["schemas"]["TaxonSynonym"][];
             rankRaw?: string | null;
+            vernaculars: components["schemas"]["TaxonVernacular"][];
+            distributions: components["schemas"]["TaxonDistribution"][];
+        };
+        TaxonVernacular: {
+            locale: string;
+            commonName: string;
+            preferred: boolean;
+        };
+        TaxonDistribution: {
+            /** Format: int64 */
+            id: number;
+            countryCode?: string | null;
+            locality?: string | null;
+            establishmentMeans?: string | null;
+            threatStatus?: string | null;
+            sourceText?: string | null;
         };
         PageTaxonListItem: {
             items: components["schemas"]["TaxonListItem"][];
@@ -329,6 +350,14 @@ export interface components {
             byKingdom: {
                 [key: string]: number;
             };
+            dataset?: components["schemas"]["DatasetCitation"];
+        };
+        DatasetCitation: {
+            title?: string | null;
+            version?: string | null;
+            sourceUrl?: string | null;
+            /** Format: date-time */
+            importedAt?: string | null;
         };
         CreateTaxonRequest: {
             /** Format: int64 */

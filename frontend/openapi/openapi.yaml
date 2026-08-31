@@ -383,13 +383,18 @@ components:
         scientificName: { type: string }
     TaxonDetail:
       type: object
-      required: [id, rank, scientificName, locale, childCount, accepted, breadcrumbs, media, mediaTotal, synonyms]
+      required: [id, rank, scientificName, locale, childCount, accepted, breadcrumbs, media, mediaTotal, synonyms, vernaculars, distributions]
       properties:
         id: { type: integer, format: int64 }
         parentId: { type: integer, format: int64, nullable: true }
         rank: { $ref: '#/components/schemas/TaxonRank' }
         scientificName: { type: string }
         scientificNameAuthorship: { type: string, nullable: true }
+        scientificNameVerbatim: { type: string, nullable: true }
+        namePublishedIn: { type: string, nullable: true }
+        nameAccordingTo: { type: string, nullable: true }
+        nomenclaturalCode: { type: string, nullable: true }
+        nomenclaturalStatus: { type: string, nullable: true }
         commonName: { type: string, nullable: true }
         summary: { type: string, nullable: true }
         description: { type: string, nullable: true }
@@ -407,6 +412,29 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TaxonSynonym' }
         rankRaw: { type: string, nullable: true }
+        vernaculars:
+          type: array
+          items: { $ref: '#/components/schemas/TaxonVernacular' }
+        distributions:
+          type: array
+          items: { $ref: '#/components/schemas/TaxonDistribution' }
+    TaxonVernacular:
+      type: object
+      required: [locale, commonName, preferred]
+      properties:
+        locale: { type: string }
+        commonName: { type: string }
+        preferred: { type: boolean }
+    TaxonDistribution:
+      type: object
+      required: [id]
+      properties:
+        id: { type: integer, format: int64 }
+        countryCode: { type: string, nullable: true }
+        locality: { type: string, nullable: true }
+        establishmentMeans: { type: string, nullable: true }
+        threatStatus: { type: string, nullable: true }
+        sourceText: { type: string, nullable: true }
     PageTaxonListItem:
       type: object
       required: [items, total, page, size]
@@ -438,6 +466,16 @@ components:
         byKingdom:
           type: object
           additionalProperties: { type: integer, format: int64 }
+        dataset:
+          $ref: '#/components/schemas/DatasetCitation'
+          nullable: true
+    DatasetCitation:
+      type: object
+      properties:
+        title: { type: string, nullable: true }
+        version: { type: string, nullable: true }
+        sourceUrl: { type: string, nullable: true }
+        importedAt: { type: string, format: date-time, nullable: true }
     CreateTaxonRequest:
       type: object
       required: [rank, scientificName]

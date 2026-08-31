@@ -67,6 +67,20 @@ const authorshipLine = computed(() => {
   const a = detail.value?.scientificNameAuthorship
   return a && a.trim() ? a.trim() : ''
 })
+const otherVernaculars = computed(() => {
+  const list = detail.value?.vernaculars ?? []
+  const current = detail.value?.locale
+  return list.filter((v) => v.locale !== current && v.commonName)
+})
+const distributions = computed(() => detail.value?.distributions ?? [])
+const namePublishedIn = computed(() => detail.value?.namePublishedIn?.trim() || '')
+const nomenclaturalMeta = computed(() => {
+  const parts = [
+    detail.value?.nomenclaturalCode,
+    detail.value?.nomenclaturalStatus,
+  ].filter((p): p is string => !!p && p.trim().length > 0)
+  return parts.join(' · ')
+})
 
 let detailAbort: AbortController | null = null
 let searchAbort: AbortController | null = null
@@ -315,8 +329,29 @@ onBeforeUnmount(() => {
           <p v-if="authorshipLine" class="authorship">{{ authorshipLine }}</p>
           <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
           <p class="meta">{{ rankLabel(detail.rank) }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
+          <p v-if="namePublishedIn" class="muted pub">{{ t('browse.publishedIn') }}: {{ namePublishedIn }}</p>
+          <p v-if="nomenclaturalMeta" class="muted">{{ nomenclaturalMeta }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
           <div v-if="descriptionHtml" class="desc markdown" v-html="descriptionHtml" />
+          <div v-if="otherVernaculars.length" class="vernaculars">
+            <h3>{{ t('browse.otherVernaculars') }}</h3>
+            <ul>
+              <li v-for="v in otherVernaculars" :key="`${v.locale}-${v.commonName}`">
+                <span class="locale">{{ v.locale }}</span>
+                <span>{{ v.commonName }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-if="distributions.length" class="distributions">
+            <h3>{{ t('browse.distributions') }}</h3>
+            <ul>
+              <li v-for="d in distributions" :key="d.id">
+                <strong v-if="d.countryCode">{{ d.countryCode }}</strong>
+                <span v-if="d.locality">{{ d.locality }}</span>
+                <em v-if="d.establishmentMeans">{{ d.establishmentMeans }}</em>
+              </li>
+            </ul>
+          </div>
           <div v-if="detail.synonyms?.length" class="synonyms">
             <h3>{{ t('browse.synonyms') }}</h3>
             <ul>
@@ -477,19 +512,48 @@ h1 {
   margin-top: var(--space-4);
 }
 
-.synonyms h3 {
+.synonyms h3,
+.vernaculars h3,
+.distributions h3 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
-.synonyms ul {
+.synonyms ul,
+.vernaculars ul,
+.distributions ul {
   margin: 0;
   padding-left: 1.1rem;
 }
 
 .synonyms em {
   font-style: italic;
+}
+
+.vernaculars,
+.distributions {
+  margin-top: var(--space-4);
+}
+
+.vernaculars .locale {
+  display: inline-block;
+  min-width: 3.5rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  margin-right: var(--space-2);
+}
+
+.distributions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pub {
+  margin: 0.25rem 0 0;
+  font-size: var(--text-sm);
 }
 
 .gallery {

@@ -49,6 +49,21 @@ public class Taxon {
     @Column(name = "scientific_name_authorship", length = 255)
     private String scientificNameAuthorship;
 
+    @Column(name = "scientific_name_verbatim", length = 512)
+    private String scientificNameVerbatim;
+
+    @Column(name = "name_published_in", length = 512)
+    private String namePublishedIn;
+
+    @Column(name = "name_according_to", length = 512)
+    private String nameAccordingTo;
+
+    @Column(name = "nomenclatural_code", length = 32)
+    private String nomenclaturalCode;
+
+    @Column(name = "nomenclatural_status", length = 64)
+    private String nomenclaturalStatus;
+
     @Column(name = "materialized_path", nullable = false, length = 768)
     private String materializedPath = "/";
 
@@ -130,6 +145,46 @@ public class Taxon {
 
     public void setScientificNameAuthorship(String scientificNameAuthorship) {
         this.scientificNameAuthorship = scientificNameAuthorship;
+    }
+
+    public String getScientificNameVerbatim() {
+        return scientificNameVerbatim;
+    }
+
+    public void setScientificNameVerbatim(String scientificNameVerbatim) {
+        this.scientificNameVerbatim = scientificNameVerbatim;
+    }
+
+    public String getNamePublishedIn() {
+        return namePublishedIn;
+    }
+
+    public void setNamePublishedIn(String namePublishedIn) {
+        this.namePublishedIn = namePublishedIn;
+    }
+
+    public String getNameAccordingTo() {
+        return nameAccordingTo;
+    }
+
+    public void setNameAccordingTo(String nameAccordingTo) {
+        this.nameAccordingTo = nameAccordingTo;
+    }
+
+    public String getNomenclaturalCode() {
+        return nomenclaturalCode;
+    }
+
+    public void setNomenclaturalCode(String nomenclaturalCode) {
+        this.nomenclaturalCode = nomenclaturalCode;
+    }
+
+    public String getNomenclaturalStatus() {
+        return nomenclaturalStatus;
+    }
+
+    public void setNomenclaturalStatus(String nomenclaturalStatus) {
+        this.nomenclaturalStatus = nomenclaturalStatus;
     }
 
     public String getMaterializedPath() {

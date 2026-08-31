@@ -13,17 +13,19 @@ import com.chenxiang.biotree.api.common.PageResult;
 import com.chenxiang.biotree.api.taxon.CreateTaxonRequest;
 import com.chenxiang.biotree.api.taxon.TaxonBreadcrumbDto;
 import com.chenxiang.biotree.api.taxon.TaxonDetailDto;
+import com.chenxiang.biotree.api.taxon.TaxonDistributionDto;
 import com.chenxiang.biotree.api.taxon.TaxonListItemDto;
 import com.chenxiang.biotree.api.taxon.TaxonMediaDto;
 import com.chenxiang.biotree.api.taxon.TaxonSynonymDto;
+import com.chenxiang.biotree.api.taxon.TaxonVernacularDto;
 import com.chenxiang.biotree.api.taxon.UpdateTaxonRequest;
 import com.chenxiang.biotree.domain.taxon.Taxon;
 import com.chenxiang.biotree.domain.taxon.TaxonI18n;
 import com.chenxiang.biotree.domain.taxon.TaxonMedia;
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import com.chenxiang.biotree.domain.taxon.TaxonRankRules;
-import com.chenxiang.biotree.domain.taxon.TaxonSynonym;
 import com.chenxiang.biotree.domain.taxon.TaxonView;
+import com.chenxiang.biotree.infrastructure.persistence.TaxonDistributionRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonI18nRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonMediaRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonRepository;
@@ -56,6 +58,7 @@ public class TaxonService {
     private final TaxonI18nRepository taxonI18nRepository;
     private final TaxonMediaRepository taxonMediaRepository;
     private final TaxonSynonymRepository taxonSynonymRepository;
+    private final TaxonDistributionRepository taxonDistributionRepository;
     private final TaxonSearchDao taxonSearchDao;
     private final StorageService storageService;
     private final SimpleTaxonChildrenCollector simpleChildrenCollector;
@@ -65,6 +68,7 @@ public class TaxonService {
             TaxonI18nRepository taxonI18nRepository,
             TaxonMediaRepository taxonMediaRepository,
             TaxonSynonymRepository taxonSynonymRepository,
+            TaxonDistributionRepository taxonDistributionRepository,
             TaxonSearchDao taxonSearchDao,
             StorageService storageService,
             SimpleTaxonChildrenCollector simpleChildrenCollector) {
@@ -72,6 +76,7 @@ public class TaxonService {
         this.taxonI18nRepository = taxonI18nRepository;
         this.taxonMediaRepository = taxonMediaRepository;
         this.taxonSynonymRepository = taxonSynonymRepository;
+        this.taxonDistributionRepository = taxonDistributionRepository;
         this.taxonSearchDao = taxonSearchDao;
         this.storageService = storageService;
         this.simpleChildrenCollector = simpleChildrenCollector;
@@ -150,12 +155,31 @@ public class TaxonService {
         List<TaxonSynonymDto> synonyms = taxonSynonymRepository.findByTaxonIdOrderByScientificNameAsc(id).stream()
                 .map(s -> new TaxonSynonymDto(s.getId(), s.getScientificName()))
                 .toList();
+        List<TaxonVernacularDto> vernaculars = taxonI18nRepository.findByTaxonId(id).stream()
+                .filter(row -> StringUtils.hasText(row.getCommonName()))
+                .map(row -> new TaxonVernacularDto(row.getLocale(), row.getCommonName(), row.isPreferred()))
+                .toList();
+        List<TaxonDistributionDto> distributions =
+                taxonDistributionRepository.findByTaxonIdOrderByCountryCodeAscIdAsc(id).stream()
+                        .map(d -> new TaxonDistributionDto(
+                                d.getId(),
+                                d.getCountryCode(),
+                                d.getLocality(),
+                                d.getEstablishmentMeans(),
+                                d.getThreatStatus(),
+                                d.getSourceText()))
+                        .toList();
         return new TaxonDetailDto(
                 taxon.getId(),
                 taxon.getParent() == null ? null : taxon.getParent().getId(),
                 taxon.getRank(),
                 taxon.getScientificName(),
                 taxon.getScientificNameAuthorship(),
+                taxon.getScientificNameVerbatim(),
+                taxon.getNamePublishedIn(),
+                taxon.getNameAccordingTo(),
+                taxon.getNomenclaturalCode(),
+                taxon.getNomenclaturalStatus(),
                 i18n.commonName(),
                 i18n.summary(),
                 i18n.description(),
@@ -166,7 +190,9 @@ public class TaxonService {
                 media,
                 mediaTotal,
                 synonyms,
-                taxon.getRankRaw());
+                taxon.getRankRaw(),
+                vernaculars,
+                distributions);
     }
 
     /**
@@ -322,9 +348,12 @@ public class TaxonService {
         }
         List<TaxonMedia> mediaList = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(id);
         for (TaxonMedia media : mediaList) {
-            storageService.delete(media.getStorageKey());
+            if (StringUtils.hasText(media.getStorageKey())) {
+                storageService.delete(media.getStorageKey());
+            }
             taxonMediaRepository.delete(media);
         }
+        taxonDistributionRepository.deleteByTaxonId(id);
         taxonI18nRepository.deleteByTaxonId(id);
         taxonSynonymRepository.findByTaxonIdOrderByScientificNameAsc(id).forEach(taxonSynonymRepository::delete);
 
@@ -487,9 +516,17 @@ public class TaxonService {
     }
 
     private TaxonMediaDto toMediaDto(TaxonMedia media) {
+        String url;
+        if (StringUtils.hasText(media.getSourceUrl())) {
+            url = media.getSourceUrl();
+        } else if (StringUtils.hasText(media.getStorageKey())) {
+            url = storageService.resolveUrl(media.getStorageKey());
+        } else {
+            url = "";
+        }
         return new TaxonMediaDto(
                 media.getId(),
-                storageService.resolveUrl(media.getStorageKey()),
+                url,
                 media.getMimeType(),
                 media.getWidth(),
                 media.getHeight(),

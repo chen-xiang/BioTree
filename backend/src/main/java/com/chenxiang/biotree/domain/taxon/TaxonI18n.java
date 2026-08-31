@@ -43,6 +43,9 @@ public class TaxonI18n {
     @Column(columnDefinition = "MEDIUMTEXT")
     private String description;
 
+    @Column(nullable = false)
+    private boolean preferred;
+
     public Long getId() {
         return id;
     }
@@ -89,5 +92,13 @@ public class TaxonI18n {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public boolean isPreferred() {
+        return preferred;
+    }
+
+    public void setPreferred(boolean preferred) {
+        this.preferred = preferred;
     }
 }

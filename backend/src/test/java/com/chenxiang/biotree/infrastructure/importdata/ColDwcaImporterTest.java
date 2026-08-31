@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 DwC 描述/分布/媒体与命名学字段
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -15,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class ColDwcaImporterTest {
     Path tempDir;
 
     @Test
-    void importFixtureShouldCreateHierarchyAndVernaculars() throws Exception {
+    void importFixtureShouldCreateHierarchyAndDwcaExtras() throws Exception {
         Path zip = tempDir.resolve("fixture_dwca.zip");
         writeFixture(zip);
 
@@ -50,6 +50,9 @@ class ColDwcaImporterTest {
         properties.setResume(false);
         properties.setImportVernaculars(true);
         properties.setImportSynonyms(true);
+        properties.setImportDescriptions(true);
+        properties.setImportDistributions(true);
+        properties.setImportMedia(true);
         properties.setCommitBatchSize(50);
         properties.setKingdoms(List.of("Animalia", "Plantae"));
         properties.setRankMode("full");
@@ -58,6 +61,9 @@ class ColDwcaImporterTest {
         assertTrue(stats.taxonCount() >= 10);
         assertTrue(stats.vernacularCount() >= 2);
         assertTrue(stats.synonymCount() >= 1);
+        assertTrue(stats.descriptionCount() >= 1);
+        assertTrue(stats.distributionCount() >= 1);
+        assertTrue(stats.mediaCount() >= 1);
 
         Integer kingdoms = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'KINGDOM'", Integer.class);
@@ -67,6 +73,18 @@ class ColDwcaImporterTest {
                 "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'SUBGENUS'", Integer.class);
         assertEquals(1, subgenus);
 
+        String ssp = jdbcTemplate.queryForObject(
+                "SELECT scientific_name FROM taxon WHERE taxon_rank = 'SUBSPECIES'", String.class);
+        assertEquals("Homo sapiens sapiens", ssp);
+
+        Integer published = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE scientific_name = 'Homo sapiens' AND name_published_in IS NOT NULL
+                """,
+                Integer.class);
+        assertEquals(1, published);
+
         Integer human = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*) FROM taxon t
@@ -75,6 +93,25 @@ class ColDwcaImporterTest {
                 """,
                 Integer.class);
         assertEquals(1, human);
+
+        Integer desc = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon_i18n
+                WHERE locale = 'en' AND description LIKE '%bipedal%'
+                """,
+                Integer.class);
+        assertEquals(1, desc);
+
+        Integer dist = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM taxon_distribution", Integer.class);
+        assertTrue(dist != null && dist >= 1);
+
+        Integer media = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taxon_media WHERE source_url IS NOT NULL", Integer.class);
+        assertTrue(media != null && media >= 1);
+
+        Integer meta = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM import_dataset_meta WHERE source_key = 'col'", Integer.class);
+        assertEquals(1, meta);
     }
 
     private static void writeFixture(Path zip) throws IOException {
@@ -91,7 +128,7 @@ class ColDwcaImporterTest {
         taxa.append(
                 "SG1\tGE1\t\t\t\t\taccepted\tsubgenus\tHomo\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
         taxa.append(
-                "SP1\tSG1\t\t\t\t\taccepted\tspecies\tHomo sapiens Linnaeus, 1758\tLinnaeus, 1758\t\tHomo\t\tsapiens\t\t\t\t\t\t\tAnimalia\n");
+                "SP1\tSG1\t\t\t\t\taccepted\tspecies\tHomo sapiens Linnaeus, 1758\tLinnaeus, 1758\t\tHomo\t\tsapiens\t\t\tITIS\tSyst. Nat.\tICZN\t\tAnimalia\n");
         taxa.append(
                 "SSP1\tSP1\t\t\t\t\taccepted\tsubspecies\tHomo sapiens sapiens\t\t\tHomo\t\tsapiens\tsapiens\t\t\t\t\t\tAnimalia\n");
         taxa.append(
@@ -100,10 +137,40 @@ class ColDwcaImporterTest {
 
         String vernacular =
                 """
-                dwc:taxonID\tdcterms:language\tdwc:vernacularName\tclb:merged
-                SP1\tzho\t智人\tfalse
-                SP1\teng\tHuman\tfalse
-                N\teng\tAnimals\tfalse
+                dwc:taxonID\tdcterms:language\tdwc:vernacularName\tdwc:isPreferredName
+                SP1\tzho\t智人\ttrue
+                SP1\teng\tHuman\ttrue
+                SP1\tjpn\tヒト\tfalse
+                N\teng\tAnimals\ttrue
+                """;
+
+        String description =
+                """
+                taxonID\tdescription\tlanguage\ttype
+                SP1\tA bipedal primate.\teng\tgeneral
+                """;
+
+        String distribution =
+                """
+                taxonID\tcountryCode\tlocality\testablishmentMeans
+                SP1\tCN\tEast Asia\tnative
+                """;
+
+        String media =
+                """
+                taxonID\tidentifier\tlicense\tcreator\ttitle\tformat
+                SP1\thttps://example.com/homo.jpg\tCC-BY\tExample\tHuman\timage/jpeg
+                """;
+
+        String eml =
+                """
+                <?xml version="1.0"?>
+                <eml:eml xmlns:eml="eml://ecoinformatics.org/eml-2.1.1">
+                  <dataset>
+                    <title>Catalogue of Life Test Fixture</title>
+                    <pubDate>2026-08-01</pubDate>
+                  </dataset>
+                </eml:eml>
                 """;
 
         try (OutputStream out = Files.newOutputStream(zip);
@@ -113,6 +180,18 @@ class ColDwcaImporterTest {
             zipOut.closeEntry();
             zipOut.putNextEntry(new ZipEntry("VernacularName.tsv"));
             zipOut.write(vernacular.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            zipOut.putNextEntry(new ZipEntry("Description.tsv"));
+            zipOut.write(description.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            zipOut.putNextEntry(new ZipEntry("Distribution.tsv"));
+            zipOut.write(distribution.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            zipOut.putNextEntry(new ZipEntry("Media.tsv"));
+            zipOut.write(media.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            zipOut.putNextEntry(new ZipEntry("eml.xml"));
+            zipOut.write(eml.getBytes(StandardCharsets.UTF_8));
             zipOut.closeEntry();
         }
     }

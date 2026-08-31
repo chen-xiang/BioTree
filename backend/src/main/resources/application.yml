@@ -73,6 +73,9 @@ app:
     max-per-rank: 0
     import-vernaculars: true
     import-synonyms: true
+    import-descriptions: true
+    import-distributions: true
+    import-media: true
     commit-batch-size: 500
     # full=含中间级；legacy7=仅林奈七级
     rank-mode: full
