@@ -249,7 +249,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        TaxonRank: "KINGDOM" | "PHYLUM" | "CLASS" | "ORDER" | "FAMILY" | "GENUS" | "SPECIES";
+        TaxonRank: "KINGDOM" | "SUBKINGDOM" | "PHYLUM" | "SUBPHYLUM" | "CLASS" | "SUBCLASS" | "ORDER" | "SUBORDER" | "SUPERFAMILY" | "FAMILY" | "SUBFAMILY" | "TRIBE" | "GENUS" | "SUBGENUS" | "SPECIES" | "SUBSPECIES" | "VARIETY" | "FORM" | "OTHER";
         TaxonListItem: {
             /** Format: int64 */
             id: number;
@@ -258,6 +258,7 @@ export interface components {
             commonName?: string | null;
             childCount: number;
             hasChildren: boolean;
+            rankRaw?: string | null;
         };
         TaxonBreadcrumb: {
             /** Format: int64 */
@@ -291,6 +292,7 @@ export interface components {
             parentId?: number | null;
             rank: components["schemas"]["TaxonRank"];
             scientificName: string;
+            scientificNameAuthorship?: string | null;
             commonName?: string | null;
             summary?: string | null;
             description?: string | null;
@@ -302,6 +304,7 @@ export interface components {
             /** Format: int64 */
             mediaTotal: number;
             synonyms: components["schemas"]["TaxonSynonym"][];
+            rankRaw?: string | null;
         };
         PageTaxonListItem: {
             items: components["schemas"]["TaxonListItem"][];
@@ -460,6 +463,7 @@ export interface operations {
                 locale?: string;
                 page?: number;
                 size?: number;
+                view?: "simple" | "full";
             };
             header?: never;
             path?: never;
@@ -507,6 +511,7 @@ export interface operations {
         parameters: {
             query?: {
                 locale?: string;
+                view?: "simple" | "full";
             };
             header?: never;
             path: {

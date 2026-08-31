@@ -46,6 +46,11 @@ public class ImportProperties {
     /** checkpoint 任务键。 */
     private String jobKey = "col";
 
+    /**
+     * 等级模式：full=含中间级；legacy7=仅林奈七级（旧行为）。
+     */
+    private String rankMode = "full";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -124,5 +129,17 @@ public class ImportProperties {
 
     public void setJobKey(String jobKey) {
         this.jobKey = jobKey;
+    }
+
+    public String getRankMode() {
+        return rankMode;
+    }
+
+    public void setRankMode(String rankMode) {
+        this.rankMode = rankMode;
+    }
+
+    public boolean isLegacySevenRanks() {
+        return rankMode != null && rankMode.trim().equalsIgnoreCase("legacy7");
     }
 }

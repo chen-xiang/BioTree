@@ -52,15 +52,20 @@ class ColDwcaImporterTest {
         properties.setImportSynonyms(true);
         properties.setCommitBatchSize(50);
         properties.setKingdoms(List.of("Animalia", "Plantae"));
+        properties.setRankMode("full");
 
         ColDwcaImporter.ImportStats stats = importer.importArchive(zip, properties);
-        assertTrue(stats.taxonCount() >= 8);
+        assertTrue(stats.taxonCount() >= 10);
         assertTrue(stats.vernacularCount() >= 2);
         assertTrue(stats.synonymCount() >= 1);
 
         Integer kingdoms = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'KINGDOM'", Integer.class);
         assertEquals(2, kingdoms);
+
+        Integer subgenus = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'SUBGENUS'", Integer.class);
+        assertEquals(1, subgenus);
 
         Integer human = jdbcTemplate.queryForObject(
                 """
@@ -82,9 +87,13 @@ class ColDwcaImporterTest {
         taxa.append("CL1\tPH1\t\t\t\t\taccepted\tclass\tMammalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
         taxa.append("OR1\tCL1\t\t\t\t\taccepted\torder\tPrimates\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
         taxa.append("FA1\tOR1\t\t\t\t\taccepted\tfamily\tHominidae\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
-        taxa.append("GE1\tFA1\t\t\t\t\taccepted\tgenus\tHomo Linnaeus, 1758\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("GE1\tFA1\t\t\t\t\taccepted\tgenus\tHomo Linnaeus, 1758\tLinnaeus, 1758\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
         taxa.append(
-                "SP1\tGE1\t\t\t\t\taccepted\tspecies\tHomo sapiens Linnaeus, 1758\t\t\tHomo\t\tsapiens\t\t\t\t\t\t\tAnimalia\n");
+                "SG1\tGE1\t\t\t\t\taccepted\tsubgenus\tHomo\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append(
+                "SP1\tSG1\t\t\t\t\taccepted\tspecies\tHomo sapiens Linnaeus, 1758\tLinnaeus, 1758\t\tHomo\t\tsapiens\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append(
+                "SSP1\tSP1\t\t\t\t\taccepted\tsubspecies\tHomo sapiens sapiens\t\t\tHomo\t\tsapiens\tsapiens\t\t\t\t\t\tAnimalia\n");
         taxa.append(
                 "SP1S\tGE1\tSP1\t\t\t\tsynonym\tspecies\tHomo sapien\t\t\tHomo\t\tsapien\t\t\t\t\t\t\tAnimalia\n");
         taxa.append("PH2\tP\t\t\t\t\taccepted\tphylum\tMagnoliophyta\t\t\t\t\t\t\t\t\t\t\t\tPlantae\n");

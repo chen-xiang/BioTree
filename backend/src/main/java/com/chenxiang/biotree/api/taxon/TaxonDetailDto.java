@@ -16,6 +16,7 @@ public record TaxonDetailDto(
         Long parentId,
         TaxonRank rank,
         String scientificName,
+        String scientificNameAuthorship,
         String commonName,
         String summary,
         String description,
@@ -25,5 +26,6 @@ public record TaxonDetailDto(
         List<TaxonBreadcrumbDto> breadcrumbs,
         List<TaxonMediaDto> media,
         long mediaTotal,
-        List<TaxonSynonymDto> synonyms) {
+        List<TaxonSynonymDto> synonyms,
+        String rankRaw) {
 }

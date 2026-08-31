@@ -4,6 +4,8 @@
 
 配套文档：[TECH_STACK.md](./TECH_STACK.md) · [DATA_STORAGE.md](./DATA_STORAGE.md) · [DATA_IMPORT.md](./DATA_IMPORT.md) · [PERFORMANCE.md](./PERFORMANCE.md) · [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md)
 
+> **实施进度（`cursor/implement-full-taxonomy-60ae`）**：R1–R4 与 R5（命名人字段/导入/展示）已落地——扩展 `TaxonRank`/`rank_order`、完整阶元导入（`rank-mode=full|legacy7`）、API `view=simple|full`、浏览双模式 UI、管理端默认 full、命名人与 `rankRaw`。R6–R10（多语言俗名扩量导入、描述/分布/媒体外链、simple 投影加速）后续 PR。
+
 **难度表述**：用「改动面 / 依赖 / 风险」描述，不以日历工期估算。
 
 ---

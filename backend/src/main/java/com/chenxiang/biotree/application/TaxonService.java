@@ -23,6 +23,7 @@ import com.chenxiang.biotree.domain.taxon.TaxonMedia;
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import com.chenxiang.biotree.domain.taxon.TaxonRankRules;
 import com.chenxiang.biotree.domain.taxon.TaxonSynonym;
+import com.chenxiang.biotree.domain.taxon.TaxonView;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonI18nRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonMediaRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonRepository;
@@ -32,8 +33,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +58,7 @@ public class TaxonService {
     private final TaxonSynonymRepository taxonSynonymRepository;
     private final TaxonSearchDao taxonSearchDao;
     private final StorageService storageService;
+    private final SimpleTaxonChildrenCollector simpleChildrenCollector;
 
     public TaxonService(
             TaxonRepository taxonRepository,
@@ -62,27 +66,46 @@ public class TaxonService {
             TaxonMediaRepository taxonMediaRepository,
             TaxonSynonymRepository taxonSynonymRepository,
             TaxonSearchDao taxonSearchDao,
-            StorageService storageService) {
+            StorageService storageService,
+            SimpleTaxonChildrenCollector simpleChildrenCollector) {
         this.taxonRepository = taxonRepository;
         this.taxonI18nRepository = taxonI18nRepository;
         this.taxonMediaRepository = taxonMediaRepository;
         this.taxonSynonymRepository = taxonSynonymRepository;
         this.taxonSearchDao = taxonSearchDao;
         this.storageService = storageService;
+        this.simpleChildrenCollector = simpleChildrenCollector;
     }
 
     @Transactional(readOnly = true)
     public PageResult<TaxonListItemDto> listChildren(Long parentId, String locale, int page, int size) {
+        return listChildren(parentId, locale, page, size, TaxonView.SIMPLE);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<TaxonListItemDto> listChildren(
+            Long parentId, String locale, int page, int size, TaxonView view) {
         String resolvedLocale = LocaleSupport.normalize(locale);
         PageRequest pageable = pageRequest(page, size);
-        Page<Taxon> taxa = parentId == null
-                ? taxonRepository.findByParentIsNull(pageable)
-                : taxonRepository.findByParentId(parentId, pageable);
+        if (view == TaxonView.FULL) {
+            Page<Taxon> taxa = parentId == null
+                    ? taxonRepository.findByParentIsNull(pageable)
+                    : taxonRepository.findByParentId(parentId, pageable);
+            return PageResult.of(
+                    toListItems(taxa.getContent(), resolvedLocale, TaxonView.FULL),
+                    taxa.getTotalElements(),
+                    taxa.getNumber(),
+                    taxa.getSize());
+        }
+        List<Taxon> all = simpleChildrenCollector.collect(parentId);
+        int from = Math.min(pageable.getPageNumber() * pageable.getPageSize(), all.size());
+        int to = Math.min(from + pageable.getPageSize(), all.size());
+        List<Taxon> slice = all.subList(from, to);
         return PageResult.of(
-                toListItems(taxa.getContent(), resolvedLocale),
-                taxa.getTotalElements(),
-                taxa.getNumber(),
-                taxa.getSize());
+                toListItems(slice, resolvedLocale, TaxonView.SIMPLE),
+                all.size(),
+                pageable.getPageNumber(),
+                pageable.getPageSize());
     }
 
     @Transactional(readOnly = true)
@@ -96,7 +119,7 @@ public class TaxonService {
         String term = q.trim();
         Page<Taxon> taxa = taxonSearchDao.search(term, locales, pageable);
         return PageResult.of(
-                toListItems(taxa.getContent(), resolvedLocale),
+                toListItems(taxa.getContent(), resolvedLocale, TaxonView.FULL),
                 taxa.getTotalElements(),
                 taxa.getNumber(),
                 taxa.getSize());
@@ -104,10 +127,15 @@ public class TaxonService {
 
     @Transactional(readOnly = true)
     public TaxonDetailDto getDetail(Long id, String locale) {
+        return getDetail(id, locale, TaxonView.SIMPLE);
+    }
+
+    @Transactional(readOnly = true)
+    public TaxonDetailDto getDetail(Long id, String locale, TaxonView view) {
         String preferredLocale = LocaleSupport.normalize(locale);
         Taxon taxon = requireTaxon(id);
         MergedI18n i18n = mergeI18n(id, preferredLocale);
-        List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, preferredLocale);
+        List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, preferredLocale, view);
         long mediaTotal = taxonMediaRepository.countByTaxonId(id);
         PageRequest mediaPage = PageRequest.of(
                 0,
@@ -127,6 +155,7 @@ public class TaxonService {
                 taxon.getParent() == null ? null : taxon.getParent().getId(),
                 taxon.getRank(),
                 taxon.getScientificName(),
+                taxon.getScientificNameAuthorship(),
                 i18n.commonName(),
                 i18n.summary(),
                 i18n.description(),
@@ -136,7 +165,8 @@ public class TaxonService {
                 breadcrumbs,
                 media,
                 mediaTotal,
-                synonyms);
+                synonyms,
+                taxon.getRankRaw());
     }
 
     /**
@@ -175,6 +205,7 @@ public class TaxonService {
         Taxon taxon = new Taxon();
         taxon.setParent(parent);
         taxon.setRank(request.rank());
+        taxon.setRankRaw(request.rank().name().toLowerCase());
         taxon.setScientificName(request.scientificName().trim());
         taxon.setMaterializedPath("/");
         taxon.setChildCount(0);
@@ -198,7 +229,7 @@ public class TaxonService {
 
         upsertI18n(taxon, request.locale(), request.commonName(), request.summary(), request.description());
         log.info("Created taxon id={} rank={} name={}", taxon.getId(), taxon.getRank(), taxon.getScientificName());
-        return getDetail(taxon.getId(), LocaleSupport.normalize(request.locale()));
+        return getDetail(taxon.getId(), LocaleSupport.normalize(request.locale()), TaxonView.FULL);
     }
 
     @Transactional
@@ -217,7 +248,7 @@ public class TaxonService {
         taxonRepository.save(taxon);
         upsertI18n(taxon, request.locale(), request.commonName(), request.summary(), request.description());
         log.info("Updated taxon id={}", id);
-        return getDetail(id, LocaleSupport.normalize(request.locale()));
+        return getDetail(id, LocaleSupport.normalize(request.locale()), TaxonView.FULL);
     }
 
     /**
@@ -249,7 +280,7 @@ public class TaxonService {
         Taxon oldParent = taxon.getParent();
         Long oldParentId = oldParent == null ? null : oldParent.getId();
         if (newParentId.equals(oldParentId)) {
-            return getDetail(id, locale);
+            return getDetail(id, locale, TaxonView.FULL);
         }
 
         assertUniqueName(newParentId, taxon.getScientificName());
@@ -280,7 +311,7 @@ public class TaxonService {
         taxonRepository.save(newParent);
 
         log.info("Moved taxon id={} to parentId={}", id, newParentId);
-        return getDetail(id, LocaleSupport.normalize(locale));
+        return getDetail(id, LocaleSupport.normalize(locale), TaxonView.FULL);
     }
 
     @Transactional
@@ -329,20 +360,34 @@ public class TaxonService {
         taxonI18nRepository.save(i18n);
     }
 
-    private List<TaxonListItemDto> toListItems(List<Taxon> taxa, String locale) {
+    private List<TaxonListItemDto> toListItems(List<Taxon> taxa, String locale, TaxonView view) {
         if (taxa.isEmpty()) {
             return List.of();
         }
         Map<Long, String> commonNames = loadCommonNames(
                 taxa.stream().map(Taxon::getId).toList(), locale);
+        Set<Long> visibleParents = new HashSet<>();
+        if (view == TaxonView.SIMPLE) {
+            for (Taxon t : taxa) {
+                if (simpleChildrenCollector.hasVisibleSimpleChildren(t.getId())) {
+                    visibleParents.add(t.getId());
+                }
+            }
+        }
         return taxa.stream()
-                .map(t -> new TaxonListItemDto(
-                        t.getId(),
-                        t.getRank(),
-                        t.getScientificName(),
-                        commonNames.get(t.getId()),
-                        t.getChildCount(),
-                        t.getChildCount() > 0))
+                .map(t -> {
+                    boolean hasChildren = view == TaxonView.FULL
+                            ? t.getChildCount() > 0
+                            : visibleParents.contains(t.getId());
+                    return new TaxonListItemDto(
+                            t.getId(),
+                            t.getRank(),
+                            t.getScientificName(),
+                            commonNames.get(t.getId()),
+                            t.getChildCount(),
+                            hasChildren,
+                            t.getRankRaw());
+                })
                 .toList();
     }
 
@@ -415,7 +460,7 @@ public class TaxonService {
         return new MergedI18n(commonName, summary, description, contentLocale);
     }
 
-    private List<TaxonBreadcrumbDto> buildBreadcrumbs(Taxon taxon, String locale) {
+    private List<TaxonBreadcrumbDto> buildBreadcrumbs(Taxon taxon, String locale, TaxonView view) {
         List<Long> ids = Arrays.stream(taxon.getMaterializedPath().split("/"))
                 .filter(StringUtils::hasText)
                 .map(Long::valueOf)
@@ -429,10 +474,14 @@ public class TaxonService {
         List<TaxonBreadcrumbDto> result = new ArrayList<>();
         for (Long id : ids) {
             Taxon node = byId.get(id);
-            if (node != null) {
-                result.add(new TaxonBreadcrumbDto(
-                        node.getId(), node.getRank(), node.getScientificName(), names.get(id)));
+            if (node == null) {
+                continue;
             }
+            if (view == TaxonView.SIMPLE && !TaxonRank.LINNAEAN_SEVEN.contains(node.getRank())) {
+                continue;
+            }
+            result.add(new TaxonBreadcrumbDto(
+                    node.getId(), node.getRank(), node.getScientificName(), names.get(id)));
         }
         return result;
     }

@@ -23,6 +23,10 @@ public interface TaxonRepository extends JpaRepository<Taxon, Long> {
 
     Page<Taxon> findByParentIsNull(Pageable pageable);
 
+    List<Taxon> findByParentIdOrderByScientificNameAsc(Long parentId);
+
+    List<Taxon> findByParentIdInOrderByScientificNameAsc(Collection<Long> parentIds);
+
     List<Taxon> findByParentIsNullOrderByScientificNameAsc();
 
     List<Taxon> findByIdIn(Collection<Long> ids);

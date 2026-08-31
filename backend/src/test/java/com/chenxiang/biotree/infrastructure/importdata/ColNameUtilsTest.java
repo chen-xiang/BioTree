@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 完整阶元与多语言
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -17,9 +18,11 @@ class ColNameUtilsTest {
     @Test
     void mapRankAndLocale() {
         assertEquals(TaxonRank.SPECIES, ColNameUtils.mapRank("species").orElseThrow());
-        assertTrue(ColNameUtils.mapRank("subspecies").isEmpty());
+        assertTrue(ColNameUtils.mapRank("subspecies", true).isEmpty());
+        assertEquals(TaxonRank.SUBSPECIES, ColNameUtils.mapRank("subspecies", false).orElseThrow());
         assertEquals("en", ColNameUtils.mapLocale("eng").orElseThrow());
         assertEquals("zh-CN", ColNameUtils.mapLocale("zho").orElseThrow());
+        assertEquals("ja", ColNameUtils.mapLocale("jpn").orElseThrow());
     }
 
     @Test
