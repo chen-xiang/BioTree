@@ -11,6 +11,7 @@ package com.chenxiang.biotree.infrastructure.importdata;
 
 import com.chenxiang.biotree.api.common.BusinessException;
 import com.chenxiang.biotree.api.common.ErrorCode;
+import com.chenxiang.biotree.application.SimpleParentSupport;
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -145,6 +146,8 @@ public class ColDwcaImporter {
             preloadExistingExternalIds(externalToId);
             Map<Long, String> idToPath = new HashMap<>();
             preloadExistingPaths(idToPath);
+            Map<Long, TaxonRank> idToRank = new HashMap<>();
+            preloadExistingRanks(idToRank);
             Map<String, Long> parentNameToId = new HashMap<>();
             preloadExistingParentNames(parentNameToId);
 
@@ -154,7 +157,7 @@ public class ColDwcaImporter {
                     continue;
                 }
                 checkpointRepository.upsert(jobKey, rankPhase, 0, rankCounters.get(rank).get(), null);
-                insertRankFromStaging(rank, externalToId, idToPath, parentNameToId, jobKey, batchSize);
+                insertRankFromStaging(rank, externalToId, idToPath, idToRank, parentNameToId, jobKey, batchSize);
             }
 
             int vernacularCount = 0;
@@ -421,6 +424,7 @@ public class ColDwcaImporter {
             TaxonRank rank,
             Map<String, Long> externalToId,
             Map<Long, String> idToPath,
+            Map<Long, TaxonRank> idToRank,
             Map<String, Long> parentNameToId,
             String jobKey,
             int batchSize) {
@@ -473,7 +477,7 @@ public class ColDwcaImporter {
                 pending.add(new PendingInsert(row, parentDbId, uniqKey));
             }
             if (!pending.isEmpty()) {
-                flushInsertBatch(pending, externalToId, idToPath, parentNameToId, inserted, ts, jobKey, rank);
+                flushInsertBatch(pending, externalToId, idToPath, idToRank, parentNameToId, inserted, ts, jobKey, rank);
             }
         }
         log.info("Inserted rank={} rows={}", rank, inserted.get());
@@ -483,6 +487,7 @@ public class ColDwcaImporter {
             List<PendingInsert> pending,
             Map<String, Long> externalToId,
             Map<Long, String> idToPath,
+            Map<Long, TaxonRank> idToRank,
             Map<String, Long> parentNameToId,
             AtomicInteger inserted,
             Timestamp ts,
@@ -549,10 +554,14 @@ public class ColDwcaImporter {
                                 : requireParentPath(idToPath, parentDbId) + id + "/";
                         externalToId.put(item.row().externalId(), id);
                         idToPath.put(id, path);
+                        idToRank.put(id, item.row().rank());
                         parentNameToId.put(item.uniqKey(), id);
-                        pathUpdates.add(new Object[] {path, id});
+                        Long simpleParentId = SimpleParentSupport.nearestLinnaeanAncestorId(
+                                SimpleParentSupport.ancestorIds(path, id), idToRank);
+                        pathUpdates.add(new Object[] {path, simpleParentId, id});
                     }
-                    jdbcTemplate.batchUpdate("UPDATE taxon SET materialized_path = ? WHERE id = ?", pathUpdates);
+                    jdbcTemplate.batchUpdate(
+                            "UPDATE taxon SET materialized_path = ?, simple_parent_id = ? WHERE id = ?", pathUpdates);
                 } catch (SQLException ex) {
                     throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Batch insert taxa failed: " + ex.getMessage());
                 }
@@ -693,6 +702,18 @@ public class ColDwcaImporter {
                 "SELECT id, materialized_path FROM taxon",
                 (org.springframework.jdbc.core.RowCallbackHandler)
                         rs -> idToPath.put(rs.getLong(1), rs.getString(2)));
+    }
+
+    private void preloadExistingRanks(Map<Long, TaxonRank> idToRank) {
+        jdbcTemplate.query(
+                "SELECT id, taxon_rank FROM taxon",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    try {
+                        idToRank.put(rs.getLong(1), TaxonRank.valueOf(rs.getString(2)));
+                    } catch (Exception ignored) {
+                        // skip unknown
+                    }
+                });
     }
 
     private void preloadExistingParentNames(Map<String, Long> parentNameToId) {
@@ -847,6 +868,7 @@ public class ColDwcaImporter {
         jdbcTemplate.update("DELETE FROM taxon_distribution");
         jdbcTemplate.update("DELETE FROM taxon_i18n");
         jdbcTemplate.update("DELETE FROM taxon_synonym");
+        jdbcTemplate.update("UPDATE taxon SET simple_parent_id = NULL");
         jdbcTemplate.update("UPDATE taxon SET parent_id = NULL");
         jdbcTemplate.update("DELETE FROM taxon");
     }

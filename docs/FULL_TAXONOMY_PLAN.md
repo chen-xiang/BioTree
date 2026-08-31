@@ -4,7 +4,7 @@
 
 配套文档：[TECH_STACK.md](./TECH_STACK.md) · [DATA_STORAGE.md](./DATA_STORAGE.md) · [DATA_IMPORT.md](./DATA_IMPORT.md) · [PERFORMANCE.md](./PERFORMANCE.md) · [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md)
 
-> **实施进度（`cursor/implement-full-taxonomy-60ae` / `cursor/dwc-fields-enrich-60ae`）**：R1–R4、R5（命名人 + 发表文献/命名法/原文名/数据集元数据）、R6（多语言俗名 + 其它语言区）、R7（Description）、R8（Distribution）、R9（Media 外链，须 license）已落地。R10（simple 投影加速等）后续。
+> **实施进度**：R1–R9 已落地；**R10**（`simple_parent_id`、view 感知 childCount、面包屑折叠、simple 祖先跳转、管理端七级预览）见 `cursor/r10-ux-perf-60ae`。
 
 **难度表述**：用「改动面 / 依赖 / 风险」描述，不以日历工期估算。
 

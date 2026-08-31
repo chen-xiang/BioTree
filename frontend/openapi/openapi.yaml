@@ -344,15 +344,16 @@ components:
         - OTHER
     TaxonListItem:
       type: object
-      required: [id, rank, scientificName, childCount, hasChildren]
+      required: [id, rank, scientificName, childCount, hasChildren, directChildCount]
       properties:
         id: { type: integer, format: int64 }
         rank: { $ref: '#/components/schemas/TaxonRank' }
         scientificName: { type: string }
         commonName: { type: string, nullable: true }
-        childCount: { type: integer }
+        childCount: { type: integer, description: Visible children for current view }
         hasChildren: { type: boolean }
         rankRaw: { type: string, nullable: true }
+        directChildCount: { type: integer, description: Physical direct child count }
     TaxonBreadcrumb:
       type: object
       required: [id, rank, scientificName]
@@ -383,7 +384,7 @@ components:
         scientificName: { type: string }
     TaxonDetail:
       type: object
-      required: [id, rank, scientificName, locale, childCount, accepted, breadcrumbs, media, mediaTotal, synonyms, vernaculars, distributions]
+      required: [id, rank, scientificName, locale, childCount, accepted, breadcrumbs, media, mediaTotal, synonyms, vernaculars, distributions, directChildCount]
       properties:
         id: { type: integer, format: int64 }
         parentId: { type: integer, format: int64, nullable: true }
@@ -399,7 +400,7 @@ components:
         summary: { type: string, nullable: true }
         description: { type: string, nullable: true }
         locale: { type: string }
-        childCount: { type: integer }
+        childCount: { type: integer, description: Visible children for current view }
         accepted: { type: boolean }
         breadcrumbs:
           type: array
@@ -418,6 +419,8 @@ components:
         distributions:
           type: array
           items: { $ref: '#/components/schemas/TaxonDistribution' }
+        directChildCount: { type: integer }
+        nearestSimpleAncestorId: { type: integer, format: int64, nullable: true }
     TaxonVernacular:
       type: object
       required: [locale, commonName, preferred]

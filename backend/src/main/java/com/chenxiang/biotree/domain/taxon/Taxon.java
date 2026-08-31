@@ -33,6 +33,11 @@ public class Taxon {
     @JoinColumn(name = "parent_id")
     private Taxon parent;
 
+    /** 最近林奈七级祖先；simple 视图 children 投影用。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "simple_parent_id")
+    private Taxon simpleParent;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "taxon_rank", nullable = false, length = 32)
     private TaxonRank rank;
@@ -102,6 +107,14 @@ public class Taxon {
 
     public void setParent(Taxon parent) {
         this.parent = parent;
+    }
+
+    public Taxon getSimpleParent() {
+        return simpleParent;
+    }
+
+    public void setSimpleParent(Taxon simpleParent) {
+        this.simpleParent = simpleParent;
     }
 
     public TaxonRank getRank() {

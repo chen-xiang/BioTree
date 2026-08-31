@@ -48,6 +48,7 @@ export default {
     otherVernaculars: '其它语言俗名',
     distributions: '分布',
     publishedIn: '发表文献',
+    jumpedToVisibleAncestor: '当前节点在简易视图中不可见，已跳到最近七级祖先',
   },
   theme: {
     light: '浅色',
@@ -64,6 +65,8 @@ export default {
     taxaNav: '分类管理',
     taxaTitle: '分类管理',
     taxaSubtitle: '搜索定位节点；按父节点维护子分类；支持移动与配图。',
+    previewSimple: '七级预览',
+    previewSimpleHint: '只读投影：按林奈七级查看子节点；编辑仍基于完整阶元。',
     root: '根（界）',
     currentParent: '当前父节点',
     children: '子分类',
