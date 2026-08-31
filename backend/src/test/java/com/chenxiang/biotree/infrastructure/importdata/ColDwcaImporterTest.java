@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 DwC 描述/分布/媒体与命名学字段
+ * Updated: 2026-09-01 覆盖同父同名属在同一批次中的合并
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -114,6 +115,42 @@ class ColDwcaImporterTest {
         assertEquals(1, meta);
     }
 
+    @Test
+    void sameParentDuplicateScientificNameShouldCollapseInBatch() throws Exception {
+        Path zip = tempDir.resolve("duplicate_genus_dwca.zip");
+        writeDuplicateGenusFixture(zip);
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(true);
+        properties.setResume(false);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(false);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setCommitBatchSize(50);
+        properties.setKingdoms(List.of("Animalia"));
+        properties.setRankMode("full");
+
+        importer.importArchive(zip, properties);
+
+        Integer genera = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'GENUS' AND scientific_name = 'Receptaculites'
+                """,
+                Integer.class);
+        assertEquals(1, genera);
+
+        Integer species = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND scientific_name = 'Receptaculites neptuni'
+                """,
+                Integer.class);
+        assertEquals(1, species);
+    }
+
     private static void writeFixture(Path zip) throws IOException {
         String taxonHeader =
                 "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
@@ -192,6 +229,26 @@ class ColDwcaImporterTest {
             zipOut.closeEntry();
             zipOut.putNextEntry(new ZipEntry("eml.xml"));
             zipOut.write(eml.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+        }
+    }
+
+    private static void writeDuplicateGenusFixture(Path zip) throws IOException {
+        String taxonHeader =
+                "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
+        String taxa = taxonHeader
+                + "N\t\t\t\t\t\taccepted\tkingdom\tAnimalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "PH1\tN\t\t\t\t\taccepted\tphylum\tPorifera\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "CL1\tPH1\t\t\t\t\taccepted\tclass\tReceptaculitida\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "OR1\tCL1\t\t\t\t\taccepted\torder\tReceptaculitales\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "FA1\tOR1\t\t\t\t\taccepted\tfamily\tReceptaculitidae\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "GE1\tFA1\t\t\t\t\taccepted\tgenus\tReceptaculites\tDefrance, 1827\t\tReceptaculites\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "GE2\tFA1\t\t\t\t\taccepted\tgenus\tReceptaculites\tBlumenbach, 1805\t\tReceptaculites\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "SP1\tGE2\t\t\t\t\taccepted\tspecies\tReceptaculites neptuni\t\t\tReceptaculites\t\tneptuni\t\t\t\t\t\t\tAnimalia\n";
+        try (OutputStream out = Files.newOutputStream(zip);
+                ZipOutputStream zipOut = new ZipOutputStream(out)) {
+            zipOut.putNextEntry(new ZipEntry("Taxon.tsv"));
+            zipOut.write(taxa.getBytes(StandardCharsets.UTF_8));
             zipOut.closeEntry();
         }
     }

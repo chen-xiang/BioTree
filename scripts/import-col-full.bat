@@ -5,6 +5,7 @@ rem ============================================================================
 rem BioTree - Catalogue of Life 全量导入（动物界 + 植物界）
 rem Author: chen-xiang
 rem Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
+rem Updated: 2026-09-01 启动前解析 JDK 21（JAVA_HOME / 常见安装路径）
 rem 用法：在资源管理器中双击，或在仓库根目录执行 scripts\import-col-full.bat
 rem 前置：JDK 21、MySQL（库 biotree）、网络（若需下载数据包）
 rem =============================================================================
@@ -25,6 +26,11 @@ if not exist "%BACKEND%\gradlew.bat" (
   echo [ERROR] gradlew.bat not found under backend\
   exit /b 1
 )
+
+call "%~dp0ensure-java.bat"
+if errorlevel 1 exit /b 1
+call "%~dp0ensure-mysql.bat"
+if errorlevel 1 exit /b 1
 
 if not exist "%ROOT%\data\import" (
   mkdir "%ROOT%\data\import" 2>nul

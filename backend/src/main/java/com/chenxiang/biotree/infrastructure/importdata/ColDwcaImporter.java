@@ -6,6 +6,7 @@
  * Updated: 2026-08-31 批量化插入/路径回写/俗名写入以支撑全量导入
  * Updated: 2026-08-31 小事务断点续跑与异名导入
  * Updated: 2026-08-31 暂存表流式导入，去掉全量 nodes Map
+ * Updated: 2026-09-01 同批同父同学名合并，避免 uk_taxon_parent_name 冲突
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -463,6 +464,8 @@ public class ColDwcaImporter {
             }
             offset += page.size();
             List<PendingInsert> pending = new ArrayList<>();
+            Set<String> pendingUniqKeys = new HashSet<>();
+            Map<String, List<String>> pendingAliases = new HashMap<>();
             for (StagedTaxon row : page) {
                 if (externalToId.containsKey(row.externalId())) {
                     continue;
@@ -474,10 +477,15 @@ public class ColDwcaImporter {
                     externalToId.put(row.externalId(), existingId);
                     continue;
                 }
+                if (!pendingUniqKeys.add(uniqKey)) {
+                    pendingAliases.computeIfAbsent(uniqKey, key -> new ArrayList<>()).add(row.externalId());
+                    continue;
+                }
                 pending.add(new PendingInsert(row, parentDbId, uniqKey));
             }
             if (!pending.isEmpty()) {
                 flushInsertBatch(pending, externalToId, idToPath, idToRank, parentNameToId, inserted, ts, jobKey, rank);
+                attachPendingNameAliases(pendingAliases, parentNameToId, externalToId);
             }
         }
         log.info("Inserted rank={} rows={}", rank, inserted.get());
@@ -573,6 +581,32 @@ public class ColDwcaImporter {
                 log.info("Inserted {} taxa for rank {}", total, rank);
             }
         });
+    }
+
+    /**
+     * 将同批内未落库的重复学名 CoL ID 映射到已插入节点，供子节点解析父级。
+     */
+    private static void attachPendingNameAliases(
+            Map<String, List<String>> pendingAliases,
+            Map<String, Long> parentNameToId,
+            Map<String, Long> externalToId) {
+        if (pendingAliases.isEmpty()) {
+            return;
+        }
+        int aliased = 0;
+        for (Map.Entry<String, List<String>> entry : pendingAliases.entrySet()) {
+            Long id = parentNameToId.get(entry.getKey());
+            if (id == null) {
+                continue;
+            }
+            for (String extraExternalId : entry.getValue()) {
+                externalToId.put(extraExternalId, id);
+                aliased++;
+            }
+        }
+        if (aliased > 0) {
+            log.info("Collapsed {} same-parent duplicate scientific names in current insert batch", aliased);
+        }
     }
 
     private Long resolveParentDbId(String parentExternalId, String kingdom, Map<String, Long> externalToId) {

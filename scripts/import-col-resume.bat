@@ -6,6 +6,7 @@ rem BioTree - Catalogue of Life 断点续跑（不 replace、不提示清空）
 rem Author: chen-xiang
 rem Created: 2026-08-31
 rem Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
+rem Updated: 2026-09-01 启动前解析 JDK 21
 rem 用法：scripts\import-col-resume.bat
 rem 前置：已有 checkpoint；DwC-A 包存在；勿与 replace=true 混用
 rem =============================================================================
@@ -25,6 +26,11 @@ if not exist "%BACKEND%\gradlew.bat" (
   echo [ERROR] gradlew.bat not found under backend\
   exit /b 1
 )
+
+call "%~dp0ensure-java.bat"
+if errorlevel 1 exit /b 1
+call "%~dp0ensure-mysql.bat"
+if errorlevel 1 exit /b 1
 
 if not exist "%DWCA%" (
   echo [ERROR] DwC-A package not found:
