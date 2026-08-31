@@ -39,6 +39,9 @@ paths:
         - in: query
           name: size
           schema: { type: integer }
+        - in: query
+          name: view
+          schema: { type: string, enum: [simple, full], default: simple }
       responses:
         '200':
           description: OK
@@ -81,6 +84,9 @@ paths:
         - in: query
           name: locale
           schema: { type: string }
+        - in: query
+          name: view
+          schema: { type: string, enum: [simple, full], default: simple }
       responses:
         '200':
           description: OK
@@ -316,7 +322,26 @@ components:
   schemas:
     TaxonRank:
       type: string
-      enum: [KINGDOM, PHYLUM, CLASS, ORDER, FAMILY, GENUS, SPECIES]
+      enum:
+        - KINGDOM
+        - SUBKINGDOM
+        - PHYLUM
+        - SUBPHYLUM
+        - CLASS
+        - SUBCLASS
+        - ORDER
+        - SUBORDER
+        - SUPERFAMILY
+        - FAMILY
+        - SUBFAMILY
+        - TRIBE
+        - GENUS
+        - SUBGENUS
+        - SPECIES
+        - SUBSPECIES
+        - VARIETY
+        - FORM
+        - OTHER
     TaxonListItem:
       type: object
       required: [id, rank, scientificName, childCount, hasChildren]
@@ -327,6 +352,7 @@ components:
         commonName: { type: string, nullable: true }
         childCount: { type: integer }
         hasChildren: { type: boolean }
+        rankRaw: { type: string, nullable: true }
     TaxonBreadcrumb:
       type: object
       required: [id, rank, scientificName]
@@ -363,6 +389,7 @@ components:
         parentId: { type: integer, format: int64, nullable: true }
         rank: { $ref: '#/components/schemas/TaxonRank' }
         scientificName: { type: string }
+        scientificNameAuthorship: { type: string, nullable: true }
         commonName: { type: string, nullable: true }
         summary: { type: string, nullable: true }
         description: { type: string, nullable: true }
@@ -379,6 +406,7 @@ components:
         synonyms:
           type: array
           items: { $ref: '#/components/schemas/TaxonSynonym' }
+        rankRaw: { type: string, nullable: true }
     PageTaxonListItem:
       type: object
       required: [items, total, page, size]

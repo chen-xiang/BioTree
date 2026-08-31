@@ -37,8 +37,17 @@ public class Taxon {
     @Column(name = "taxon_rank", nullable = false, length = 32)
     private TaxonRank rank;
 
+    @Column(name = "rank_order", nullable = false)
+    private int rankOrder;
+
+    @Column(name = "taxon_rank_raw", length = 64)
+    private String rankRaw;
+
     @Column(name = "scientific_name", nullable = false, length = 255)
     private String scientificName;
+
+    @Column(name = "scientific_name_authorship", length = 255)
+    private String scientificNameAuthorship;
 
     @Column(name = "materialized_path", nullable = false, length = 768)
     private String materializedPath = "/";
@@ -86,6 +95,25 @@ public class Taxon {
 
     public void setRank(TaxonRank rank) {
         this.rank = rank;
+        if (rank != null) {
+            this.rankOrder = rank.getRankOrder();
+        }
+    }
+
+    public int getRankOrder() {
+        return rankOrder;
+    }
+
+    public void setRankOrder(int rankOrder) {
+        this.rankOrder = rankOrder;
+    }
+
+    public String getRankRaw() {
+        return rankRaw;
+    }
+
+    public void setRankRaw(String rankRaw) {
+        this.rankRaw = rankRaw;
     }
 
     public String getScientificName() {
@@ -94,6 +122,14 @@ public class Taxon {
 
     public void setScientificName(String scientificName) {
         this.scientificName = scientificName;
+    }
+
+    public String getScientificNameAuthorship() {
+        return scientificNameAuthorship;
+    }
+
+    public void setScientificNameAuthorship(String scientificNameAuthorship) {
+        this.scientificNameAuthorship = scientificNameAuthorship;
     }
 
     public String getMaterializedPath() {

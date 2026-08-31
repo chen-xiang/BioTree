@@ -5,11 +5,12 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 子节点分页与加载更多
  * Updated: 2026-08-31 子节点较多时使用虚拟列表
+ * Updated: 2026-08-31 支持 view=simple|full
  */
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { TaxonListItem } from '@/api/taxon'
+import type { TaxonListItem, TaxonView } from '@/api/taxon'
 import { fetchChildren } from '@/api/taxon'
 import BtButton from '@/components/ui/BtButton.vue'
 import BtVirtualList from '@/components/ui/BtVirtualList.vue'
@@ -20,6 +21,7 @@ const props = defineProps<{
   depth: number
   locale: string
   selectedId: number | null
+  view?: TaxonView
 }>()
 
 const emit = defineEmits<{
@@ -40,9 +42,17 @@ const loaded = ref(false)
 
 const hasMore = computed(() => children.value.length < total.value)
 const useVirtual = computed(() => children.value.length >= VIRTUAL_THRESHOLD)
+const activeView = computed(() => props.view ?? 'simple')
 
 async function loadPage(nextPage: number, append: boolean) {
-  const result = await fetchChildren(props.node.id, props.locale, nextPage, PAGE_SIZE)
+  const result = await fetchChildren(
+    props.node.id,
+    props.locale,
+    nextPage,
+    PAGE_SIZE,
+    undefined,
+    activeView.value,
+  )
   total.value = result.total
   page.value = result.page
   children.value = append ? [...children.value, ...result.items] : result.items
@@ -76,18 +86,18 @@ async function loadMore() {
   }
 }
 
-watch(
-  () => props.locale,
-  () => {
-    loaded.value = false
-    children.value = []
-    page.value = 0
-    total.value = 0
-    if (expanded.value) {
-      expanded.value = false
-    }
-  },
-)
+function resetChildrenCache() {
+  loaded.value = false
+  children.value = []
+  page.value = 0
+  total.value = 0
+  if (expanded.value) {
+    expanded.value = false
+  }
+}
+
+watch(() => props.locale, resetChildrenCache)
+watch(activeView, resetChildrenCache)
 </script>
 
 <template>
@@ -119,6 +129,7 @@ watch(
             :node="item"
             :depth="depth + 1"
             :locale="locale"
+            :view="activeView"
             :selected-id="selectedId"
             @select="emit('select', $event)"
           />
@@ -127,10 +138,11 @@ watch(
       <template v-else>
         <TaxonTreeNode
           v-for="child in children"
-          :key="child.id"
+          :key="`${child.id}-${activeView}`"
           :node="child"
           :depth="depth + 1"
           :locale="locale"
+          :view="activeView"
           :selected-id="selectedId"
           @select="emit('select', $event)"
         />

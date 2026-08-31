@@ -2,7 +2,7 @@
 
 本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界分类数据及俗名。
 
-> **演进**：当前实现以七级 accepted 为主；完整阶元入库、默认七级视图投影及 DwC 字段补齐见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)。
+> **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。命名人等 DwC 补齐见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)。
 
 ## 1. 数据源
 
@@ -23,10 +23,10 @@ curl -L -o data/import/col_latest_dwca.zip \
 | 项 | 说明 |
 | --- | --- |
 | 过滤 | 仅 `taxonomicStatus=accepted`，且 `kingdom` 为配置的界（默认 Animalia、Plantae） |
-| 等级 | 仅七级：kingdom / phylum / class / order / family / genus / species |
-| 父级 | 若直系父级为亚属等中间等级，则沿 `parentNameUsageID` 向上找到已导入的七级节点 |
-| 学名 | 种优先 `genericName + specificEpithet`；高等级去掉命名人信息 |
-| 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN` |
+| 等级 | 默认完整阶元（亚门/亚科/亚属/亚种等）；`rank-mode=legacy7` 时仅七级 |
+| 父级 | full：按真实 `parentNameUsageID` 挂接；legacy7：中间级上溯到已入库七级 |
+| 学名 | 种优先 `genericName + specificEpithet`；写入 `scientific_name_authorship`（若有） |
+| 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN`，并扩展部分其它语言码 |
 | 外部 ID | 写入 `taxon.external_source=col` + `taxon.external_id` |
 | replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media`（管理员账号保留） |
 | 写入路径 | **暂存表流式写入**（`import_col_*`）后按等级落库；JVM 不常驻全量节点 Map |

@@ -12,6 +12,7 @@ import { apiClient, unwrap } from './client'
 import type { components } from './schema'
 
 export type TaxonRank = components['schemas']['TaxonRank']
+export type TaxonView = 'simple' | 'full'
 export type TaxonListItem = components['schemas']['TaxonListItem']
 export type PageResult<T> = {
   items: T[]
@@ -32,6 +33,7 @@ export async function fetchChildren(
   page = 0,
   size = 30,
   signal?: AbortSignal,
+  view: TaxonView = 'simple',
 ): Promise<PageResult<TaxonListItem>> {
   const result = await apiClient.GET('/api/taxa/children', {
     params: {
@@ -40,6 +42,7 @@ export async function fetchChildren(
         locale,
         page,
         size,
+        view,
       },
     },
     signal,
@@ -51,9 +54,10 @@ export async function fetchTaxonDetail(
   id: number,
   locale: string,
   signal?: AbortSignal,
+  view: TaxonView = 'simple',
 ): Promise<TaxonDetail> {
   const result = await apiClient.GET('/api/taxa/{id}', {
-    params: { path: { id }, query: { locale } },
+    params: { path: { id }, query: { locale, view } },
     signal,
   })
   return unwrap(result)

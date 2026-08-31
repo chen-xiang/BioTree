@@ -74,6 +74,8 @@ app:
     import-vernaculars: true
     import-synonyms: true
     commit-batch-size: 500
+    # full=含中间级；legacy7=仅林奈七级
+    rank-mode: full
   cache:
     # 公开只读 API 的 Cache-Control max-age（秒）；0 表示不缓存
     public-max-age-seconds: 60
