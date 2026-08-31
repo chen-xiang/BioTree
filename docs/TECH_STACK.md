@@ -203,3 +203,9 @@ BioTree/
 
 **不做：** Redis · Docker · Nginx  
 **不做（已否决）：** Maven · Axios · JWT Bearer  
+
+---
+
+## 9. 开发规范
+
+编码、文件头、测试、UI 与变更策略见 [CODING_RULES.md](./CODING_RULES.md)（Cursor 同步规则：`.cursor/rules/biotree-basics.mdc`）。  
