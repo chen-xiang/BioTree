@@ -34,6 +34,20 @@ curl -L -o data/import/col_latest_dwca.zip \
 
 ### 全量（动物界 + 植物界）
 
+**Windows（推荐）：** 双击或在仓库根目录执行：
+
+```bat
+scripts\import-col-full.bat
+```
+
+脚本会：
+
+1. 若不存在则下载 `data\import\col_latest_dwca.zip`
+2. 确认后执行全量导入（`replace=true`，`max-per-rank=0`）
+3. 导入结束自动退出
+
+**命令行（Linux / macOS / Windows Git Bash）：**
+
 ```bash
 cd backend
 ./gradlew bootRun --args='\
