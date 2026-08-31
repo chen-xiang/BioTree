@@ -256,9 +256,12 @@ export interface components {
             rank: components["schemas"]["TaxonRank"];
             scientificName: string;
             commonName?: string | null;
+            /** @description Visible children for current view */
             childCount: number;
             hasChildren: boolean;
             rankRaw?: string | null;
+            /** @description Physical direct child count */
+            directChildCount: number;
         };
         TaxonBreadcrumb: {
             /** Format: int64 */
@@ -302,6 +305,7 @@ export interface components {
             summary?: string | null;
             description?: string | null;
             locale: string;
+            /** @description Visible children for current view */
             childCount: number;
             accepted: boolean;
             breadcrumbs: components["schemas"]["TaxonBreadcrumb"][];
@@ -312,6 +316,9 @@ export interface components {
             rankRaw?: string | null;
             vernaculars: components["schemas"]["TaxonVernacular"][];
             distributions: components["schemas"]["TaxonDistribution"][];
+            directChildCount: number;
+            /** Format: int64 */
+            nearestSimpleAncestorId?: number | null;
         };
         TaxonVernacular: {
             locale: string;

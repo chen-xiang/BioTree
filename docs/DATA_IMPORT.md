@@ -123,6 +123,16 @@ cd backend
 
 全量将 `max-per-rank=0` + `rank-mode=full`，节点量显著高于仅七级，请预留磁盘与导入时间。
 
+### 运维基线（参考）
+
+| 场景 | 观察要点 |
+| --- | --- |
+| 试跑 `max-per-rank=300` | 约千级节点；适合功能验收 |
+| 全量 `rank-mode=full` | 磁盘、导入时长、`simple_parent_id` 回写与 children 延迟 |
+| `view=simple` 热点科 | children 应走 `idx_taxon_simple_parent_id`，避免 BFS 扫宽扇出 |
+
+导入结束后会写入 `import_dataset_meta`；管理首页可核对版本引用。
+
 ## 4. 配置项
 
 见 `application.yml` 中 `app.import`：

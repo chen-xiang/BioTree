@@ -62,7 +62,8 @@ const RANKS: TaxonRank[] = [
   'FORM',
   'OTHER',
 ]
-const ADMIN_VIEW = 'full' as const
+const ADMIN_VIEW_FULL = 'full' as const
+const ADMIN_VIEW_SIMPLE = 'simple' as const
 const PAGE_SIZE = 30
 const SEARCH_SIZE = 15
 
@@ -71,6 +72,8 @@ const localeStore = useLocaleStore()
 const toast = useToastStore()
 const apiLocale = computed(() => localeStore.locale)
 const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rankLabel(rank) })))
+const previewSimple = ref(false)
+const listView = computed(() => (previewSimple.value ? ADMIN_VIEW_SIMPLE : ADMIN_VIEW_FULL))
 
 const trail = ref<Crumb[]>([{ id: null, label: t('admin.root') }])
 const parentId = computed(() => trail.value[trail.value.length - 1]?.id ?? null)
@@ -112,7 +115,7 @@ async function loadList(page = 0) {
       page,
       PAGE_SIZE,
       undefined,
-      ADMIN_VIEW,
+      listView.value,
     )
     items.value = result.items
     listPage.value = result.page
@@ -157,7 +160,7 @@ async function hydrateEditing(detail: TaxonDetail) {
 
 async function startEdit(id: number) {
   try {
-    const detail = await fetchTaxonDetail(id, apiLocale.value, undefined, ADMIN_VIEW)
+    const detail = await fetchTaxonDetail(id, apiLocale.value, undefined, ADMIN_VIEW_FULL)
     await hydrateEditing(detail)
   } catch (e) {
     error.value = messageFromApiError(e)
@@ -168,7 +171,7 @@ async function startEdit(id: number) {
 /** 从搜索结果跳转：定位到其父级列表并打开编辑 */
 async function jumpFromSearch(item: TaxonListItem) {
   try {
-    const detail = await fetchTaxonDetail(item.id, apiLocale.value, undefined, ADMIN_VIEW)
+    const detail = await fetchTaxonDetail(item.id, apiLocale.value, undefined, ADMIN_VIEW_FULL)
     const crumbs: Crumb[] = [{ id: null, label: t('admin.root') }]
     for (const c of detail.breadcrumbs) {
       if (c.id === detail.id) continue
@@ -256,7 +259,9 @@ async function performMove(targetParentId: number) {
       scientificName: updated.scientificName,
       commonName: updated.commonName,
       childCount: updated.childCount,
-      hasChildren: updated.childCount > 0,
+      hasChildren: (updated.directChildCount ?? updated.childCount) > 0,
+      directChildCount: updated.directChildCount ?? updated.childCount,
+      rankRaw: updated.rankRaw,
     })
   } catch (e) {
     error.value = messageFromApiError(e)
@@ -411,6 +416,7 @@ onMounted(async () => {
 })
 
 watch(apiLocale, () => loadList(listPage.value))
+watch(previewSimple, () => loadList(0))
 watch(searchQuery, () => debouncedAdminSearch())
 watch(moveQuery, () => debouncedMoveSearch())
 </script>
@@ -447,6 +453,12 @@ watch(moveQuery, () => debouncedMoveSearch())
       </template>
     </nav>
 
+    <label class="preview-toggle">
+      <input v-model="previewSimple" type="checkbox" />
+      <span>{{ t('admin.previewSimple') }}</span>
+      <em>{{ t('admin.previewSimpleHint') }}</em>
+    </label>
+
     <div class="grid">
       <div class="panel">
         <h2>{{ t('admin.children') }}</h2>
@@ -480,6 +492,8 @@ watch(moveQuery, () => debouncedMoveSearch())
 
       <form class="panel form" @submit.prevent="onSubmit">
         <h2>{{ editing ? t('admin.edit') : t('admin.create') }}</h2>
+        <p v-if="previewSimple" class="muted">{{ t('admin.previewSimpleHint') }}</p>
+        <fieldset :disabled="previewSimple && !editing">
         <label>
           <span>{{ t('admin.rank') }}</span>
           <BtSelect v-model="form.rank" :options="rankOptions" :disabled="!!editing" />
@@ -506,8 +520,9 @@ watch(moveQuery, () => debouncedMoveSearch())
           <span>{{ t('admin.description') }}</span>
           <BtTextarea v-model="form.description" :rows="5" />
         </label>
+        </fieldset>
         <div class="actions">
-          <BtButton type="submit">{{ t('common.save') }}</BtButton>
+          <BtButton type="submit" :disabled="previewSimple && !editing">{{ t('common.save') }}</BtButton>
           <BtButton type="button" variant="ghost" @click="resetForm">{{ t('common.cancel') }}</BtButton>
           <BtButton
             v-if="editing && parentId != null && editing.parentId !== parentId"
@@ -615,6 +630,20 @@ header p {
 
 .path {
   color: var(--color-text-muted);
+}
+
+.preview-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.preview-toggle em {
+  color: var(--color-text-muted);
+  font-style: normal;
 }
 
 .grid {

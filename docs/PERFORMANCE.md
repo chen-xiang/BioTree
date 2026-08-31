@@ -32,14 +32,18 @@
 | locale | 列表/详情俗名与介绍：请求语言 → 英语 → 学名 |
 | 公开缓存 | 只读 `/api/taxa/**` 可配置短 TTL `Cache-Control`（`app.cache.public-max-age-seconds`） |
 | 「所有后代」统计/导出 | 异步或管理端任务，禁止同步堵在页面请求 |
+| `view=simple` | 子节点通过冗余列 `simple_parent_id`（最近林奈七级祖先）索引查询；导入/写路径维护；启动时对旧数据可回填 |
 
 **列表 / children 仅包含瘦字段**，例如：
 
 - `id`
 - `rank`
 - `scientificName`
-- `commonName`（当前语言）
-- `hasChildren` 或 `childCount`
+- `commonName`（当前 locale 回退链）
+- `childCount`（**相对当前 view** 的可见子节点数）
+- `directChildCount`（物理直接子节点数）
+- `hasChildren`（相对当前 view）
+- `rankRaw`（可选）
 
 **禁止**在树/列表接口中返回：
 
@@ -74,6 +78,7 @@
 | 访问模式 | 手段 |
 | --- | --- |
 | 按父节点拉子节点 | `INDEX(parent_id, …)` |
+| `view=simple` 子节点 | `INDEX(simple_parent_id)` + 林奈七级 `rank` 过滤 |
 | 学名搜索 | `scientific_name` 索引（或前缀/全文策略按实现选定） |
 | 俗名搜索 | `taxon_i18n(locale, common_name)` 相关索引 |
 | 详情 | 主键查询 |

@@ -27,6 +27,7 @@ import BtPagination from '@/components/ui/BtPagination.vue'
 import BtVirtualList from '@/components/ui/BtVirtualList.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useTaxonViewStore } from '@/stores/taxonView'
+import { useToastStore } from '@/stores/toast'
 import { messageFromApiError, rankLabel } from '@/utils/apiError'
 import { debounce } from '@/utils/debounce'
 import { renderMarkdown } from '@/utils/markdown'
@@ -38,6 +39,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const localeStore = useLocaleStore()
 const taxonViewStore = useTaxonViewStore()
+const toast = useToastStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -56,6 +58,7 @@ const gallery = ref<TaxonMedia[]>([])
 const mediaTotal = ref(0)
 const loadingMoreMedia = ref(false)
 const mobilePane = ref<'tree' | 'detail'>('tree')
+const crumbsExpanded = ref(false)
 
 const apiLocale = computed(() => localeStore.locale)
 const treeView = computed(() => taxonViewStore.view)
@@ -81,6 +84,20 @@ const nomenclaturalMeta = computed(() => {
   ].filter((p): p is string => !!p && p.trim().length > 0)
   return parts.join(' · ')
 })
+const crumbHead = computed(() => {
+  const crumbs = detail.value?.breadcrumbs ?? []
+  if (crumbsExpanded.value || crumbs.length <= 5) return crumbs
+  return crumbs.slice(0, 1)
+})
+const crumbTail = computed(() => {
+  const crumbs = detail.value?.breadcrumbs ?? []
+  if (crumbsExpanded.value || crumbs.length <= 5) return []
+  return crumbs.slice(-3)
+})
+const crumbsCollapsed = computed(() => {
+  const n = detail.value?.breadcrumbs?.length ?? 0
+  return !crumbsExpanded.value && n > 5
+})
 
 let detailAbort: AbortController | null = null
 let searchAbort: AbortController | null = null
@@ -101,6 +118,7 @@ async function loadRoots() {
 async function loadDetail(id: number, syncRoute = true) {
   selectedId.value = id
   mobilePane.value = 'detail'
+  crumbsExpanded.value = false
   if (syncRoute && String(route.params.id ?? '') !== String(id)) {
     await router.replace({ name: 'browse', params: { id: String(id) } })
   }
@@ -111,6 +129,12 @@ async function loadDetail(id: number, syncRoute = true) {
     detail.value = await fetchTaxonDetail(id, apiLocale.value, detailAbort.signal, treeView.value)
     gallery.value = [...(detail.value.media ?? [])]
     mediaTotal.value = detail.value.mediaTotal ?? gallery.value.length
+    const anchor = detail.value.nearestSimpleAncestorId
+    if (treeView.value === 'simple' && anchor != null && anchor !== id) {
+      toast.push(t('browse.jumpedToVisibleAncestor'), 'ok')
+      await loadDetail(anchor, true)
+      return
+    }
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return
     error.value = messageFromApiError(e)
@@ -318,8 +342,23 @@ onBeforeUnmount(() => {
         <template v-else-if="detail">
           <nav class="crumbs">
             <RouterLink
-              v-for="crumb in detail.breadcrumbs"
-              :key="crumb.id"
+              v-for="crumb in crumbHead"
+              :key="`h-${crumb.id}`"
+              :to="{ name: 'browse', params: { id: String(crumb.id) } }"
+            >
+              {{ crumb.commonName || crumb.scientificName }}
+            </RouterLink>
+            <button
+              v-if="crumbsCollapsed"
+              type="button"
+              class="crumb-more"
+              @click="crumbsExpanded = true"
+            >
+              …
+            </button>
+            <RouterLink
+              v-for="crumb in crumbTail"
+              :key="`t-${crumb.id}`"
               :to="{ name: 'browse', params: { id: String(crumb.id) } }"
             >
               {{ crumb.commonName || crumb.scientificName }}
@@ -605,6 +644,14 @@ h1 {
 
 .crumbs a:last-child::after {
   content: '';
+}
+
+.crumb-more {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 var(--space-1);
 }
 
 .hits {
