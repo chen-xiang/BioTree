@@ -2,6 +2,8 @@
 
 本文是在现有骨架、CoL 导入与性能硬化（含 PR #4 / #5 能力）之上的**完整落地路线**。目标：支撑动物界/植物界近乎完整数据量、可安全上线管理，并补齐体验、一致性与工程能力。
 
+> **实施进度（`cursor/implement-improvement-plan-60ae`）**：W0–W8 主干已落地——导入暂存流式、管理分页/登出、prod 加固、OpenAPI+openapi-fetch 闭环、首页品牌动效、错误码/等级 i18n、stats、Vitest/ESLint、详情 media 分页。Spotless 与导入类进一步拆分可后续小 PR。
+
 配套文档：[TECH_STACK.md](./TECH_STACK.md) · [CODING_RULES.md](./CODING_RULES.md) · [DATA_STORAGE.md](./DATA_STORAGE.md) · [PERFORMANCE.md](./PERFORMANCE.md) · [DATA_IMPORT.md](./DATA_IMPORT.md)
 
 **难度表述**：用「改动面 / 依赖 / 风险」描述，不以日历工期估算。

@@ -2,6 +2,8 @@
 
 本文档为 BioTree（生物分类：界 / 门 / 纲 / 目 / 科 / 属 / 种）管理与查看站点的**完整技术栈定稿**。
 
+与 [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md) 配套阅读。
+
 ---
 
 ## 1. 总览

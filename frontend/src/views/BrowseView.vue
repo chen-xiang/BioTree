@@ -13,9 +13,11 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
   fetchChildren,
   fetchTaxonDetail,
+  fetchTaxonMedia,
   searchTaxa,
   type TaxonDetail,
   type TaxonListItem,
+  type TaxonMedia,
 } from '@/api/taxon'
 import TaxonTreeNode from '@/components/taxon/TaxonTreeNode.vue'
 import BtButton from '@/components/ui/BtButton.vue'
@@ -23,6 +25,7 @@ import BtInput from '@/components/ui/BtInput.vue'
 import BtPagination from '@/components/ui/BtPagination.vue'
 import BtVirtualList from '@/components/ui/BtVirtualList.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { messageFromApiError, rankLabel } from '@/utils/apiError'
 import { debounce } from '@/utils/debounce'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -46,10 +49,15 @@ const searchPage = ref(0)
 const searchTotal = ref(0)
 const searching = ref(false)
 const error = ref('')
+const gallery = ref<TaxonMedia[]>([])
+const mediaTotal = ref(0)
+const loadingMoreMedia = ref(false)
 
 const apiLocale = computed(() => localeStore.locale)
 const SEARCH_SIZE = 20
+const MEDIA_PAGE = 12
 const descriptionHtml = computed(() => renderMarkdown(detail.value?.description))
+const hasMoreMedia = computed(() => gallery.value.length < mediaTotal.value)
 
 let detailAbort: AbortController | null = null
 let searchAbort: AbortController | null = null
@@ -61,7 +69,7 @@ async function loadRoots() {
     const page = await fetchChildren(null, apiLocale.value)
     roots.value = page.items
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
   } finally {
     loadingRoots.value = false
   }
@@ -77,11 +85,31 @@ async function loadDetail(id: number, syncRoute = true) {
   loadingDetail.value = true
   try {
     detail.value = await fetchTaxonDetail(id, apiLocale.value, detailAbort.signal)
+    gallery.value = [...(detail.value.media ?? [])]
+    mediaTotal.value = detail.value.mediaTotal ?? gallery.value.length
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
   } finally {
     loadingDetail.value = false
+  }
+}
+
+async function loadMoreMedia() {
+  if (!detail.value || !hasMoreMedia.value || loadingMoreMedia.value) return
+  loadingMoreMedia.value = true
+  try {
+    const page = Math.floor(gallery.value.length / MEDIA_PAGE)
+    const result = await fetchTaxonMedia(detail.value.id, page, MEDIA_PAGE)
+    mediaTotal.value = result.total
+    const seen = new Set(gallery.value.map((m) => m.id))
+    for (const item of result.items) {
+      if (!seen.has(item.id)) gallery.value.push(item)
+    }
+  } catch (e) {
+    error.value = messageFromApiError(e)
+  } finally {
+    loadingMoreMedia.value = false
   }
 }
 
@@ -187,7 +215,7 @@ onBeforeUnmount(() => {
         <template #default="{ item }">
           <button type="button" class="hit" @click="loadDetail(item.id)">
             <strong>{{ item.scientificName }}</strong>
-            <span>{{ item.commonName || item.rank }}</span>
+            <span>{{ item.commonName || rankLabel(item.rank) }}</span>
           </button>
         </template>
       </BtVirtualList>
@@ -228,7 +256,7 @@ onBeforeUnmount(() => {
           </nav>
           <h2 class="sci">{{ detail.scientificName }}</h2>
           <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
-          <p class="meta">{{ detail.rank }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
+          <p class="meta">{{ rankLabel(detail.rank) }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
           <div v-if="descriptionHtml" class="desc markdown" v-html="descriptionHtml" />
           <div v-if="detail.synonyms?.length" class="synonyms">
@@ -239,11 +267,16 @@ onBeforeUnmount(() => {
               </li>
             </ul>
           </div>
-          <div v-if="detail.media.length" class="gallery">
-            <figure v-for="m in detail.media" :key="m.id">
+          <div v-if="gallery.length" class="gallery">
+            <figure v-for="m in gallery" :key="m.id">
               <img :src="m.url" :alt="m.caption || detail.scientificName" loading="lazy" />
               <figcaption v-if="m.caption">{{ m.caption }}</figcaption>
             </figure>
+            <div v-if="hasMoreMedia" class="gallery-more">
+              <BtButton variant="ghost" :disabled="loadingMoreMedia" @click="loadMoreMedia">
+                {{ t('browse.loadMoreMedia') }}
+              </BtButton>
+            </div>
           </div>
         </template>
         <p v-else class="muted">{{ t('browse.selectHint') }}</p>

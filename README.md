@@ -9,24 +9,30 @@
 - 数据存储：[docs/DATA_STORAGE.md](docs/DATA_STORAGE.md)
 - 性能设计：[docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - 真实数据导入：[docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)
-- **改进优化实施方案**：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)
+- 改进优化实施方案：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)
 - Windows 全量导入脚本：`scripts/import-col-full.bat`
 
 ## 工程结构
 
 ```text
-backend/    Spring Boot 3（Gradle）
-frontend/   Vue 3 + Vite + TypeScript
+backend/    Spring Boot 3（Gradle）· MySQL · Flyway · Session/CSRF
+frontend/   Vue 3 · Vite · TypeScript · Pinia · vue-i18n
 docs/       设计与规范文档
 ```
 
-## 本地运行（骨架）
+## 已实现能力
+
+- 公开浏览：懒加载分类树、搜索（前缀 / MySQL FULLTEXT）、详情、异名、locale 回退、`/browse/:id`
+- 管理端：登录 Session、CSRF、分类 CRUD / 移动、配图上传（Local 或阿里云 OSS）
+- 导入：Catalogue of Life DwC-A（动物界/植物界七级 + 俗名 + 异名）、批写与断点续跑
+- 前端：深浅色 Token、基础设计系统组件、虚拟列表、Markdown 介绍
+
+## 本地运行
 
 ### 前置
 
-- JDK 21
-- Node.js 20+ / pnpm
-- MySQL 8（库名建议 `biotree`，用户/密码与 `backend/src/main/resources/application.yml` 一致，或复制 `application-local.yml.example`）
+- JDK 21、Node.js 20+ / pnpm、MySQL 8  
+- 库名建议 `biotree`；账号可与 `backend/src/main/resources/application.yml` 一致，或复制 `application-local.yml.example`
 
 ### 后端
 
@@ -37,9 +43,8 @@ cd backend
 
 - API：`http://localhost:8080`
 - OpenAPI：`http://localhost:8080/v3/api-docs`
-- Swagger UI：`http://localhost:8080/swagger-ui.html`
 - 健康检查：`GET /api/health`
-- 默认管理员（Flyway 种子）：`admin` / `admin123`（仅开发）
+- 开发管理员（非 prod 种子）：`admin` / `admin123`
 
 ### 前端
 
@@ -49,20 +54,20 @@ pnpm install
 pnpm dev
 ```
 
-- 站点：`http://localhost:5173`
-- 开发期通过 Vite 将 `/api`、`/files` 代理到 `8080`，Session Cookie 同站
+- 站点：`http://localhost:5173`（Vite 代理 `/api`、`/files`）
 
-### 从 OpenAPI 生成前端类型
-
-后端启动后：
+### 生成前端 OpenAPI 类型
 
 ```bash
 cd frontend
-pnpm openapi:generate
+pnpm openapi:generate          # 离线 openapi/openapi.yaml
+pnpm openapi:generate:live     # 需后端已启动
 ```
 
-## 当前骨架范围
+### CoL 导入（摘要）
 
-- 后端：统一响应、Security Session、Flyway 初始表与演示分类树、Local/OSS 存储切换接口、公开分类 API（children/详情/搜索）、管理端 CRUD、配图上传（Local `/files`）
-- 前端：Router / Pinia / vue-i18n / 深浅色 Token、浏览页懒加载树与搜索、登录与分类管理、配图上传/展示
-- 尚未实现：OSS SDK 实装、权威库全量导入、列表虚拟滚动优化
+见 [docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)。全量前请确认 JVM 堆与 `app.import.*`；中断后续跑请使用 `resume=true` 且勿再次 `replace=true`。
+
+## 生产注意
+
+使用 `spring.profiles.active=prod`（见 `application-prod.yml`）：强制改密、Secure Cookie、收紧 Swagger、配置 CORS/OSS。细则见改进方案 W3。

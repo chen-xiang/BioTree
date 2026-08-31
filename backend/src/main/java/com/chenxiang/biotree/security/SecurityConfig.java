@@ -7,6 +7,7 @@
  * Updated: 2026-08-31 放行本地配图静态路径 /files/**
  * Updated: 2026-08-31 Session 固定攻击防护与登出清理
  * Updated: 2026-08-31 管理端写操作启用 Cookie CSRF
+ * Updated: 2026-08-31 增加 AccessDeniedHandler
  */
 package com.chenxiang.biotree.security;
 
@@ -54,11 +55,19 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .anyRequest().permitAll())
-                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    objectMapper.writeValue(response.getOutputStream(), ApiResponse.fail(ErrorCode.UNAUTHORIZED));
-                }))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            objectMapper.writeValue(
+                                    response.getOutputStream(), ApiResponse.fail(ErrorCode.UNAUTHORIZED));
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            objectMapper.writeValue(
+                                    response.getOutputStream(), ApiResponse.fail(ErrorCode.FORBIDDEN));
+                        }))
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .logout(logout -> logout

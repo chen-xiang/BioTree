@@ -88,7 +88,7 @@ public class TaxonService {
     @Transactional(readOnly = true)
     public PageResult<TaxonListItemDto> search(String q, String locale, int page, int size) {
         if (!StringUtils.hasText(q) || q.trim().length() < 2) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Query must be at least 2 characters");
+            throw new BusinessException(ErrorCode.INVALID_QUERY);
         }
         String resolvedLocale = LocaleSupport.normalize(locale);
         List<String> locales = LocaleSupport.fallbackChain(resolvedLocale);
@@ -108,7 +108,15 @@ public class TaxonService {
         Taxon taxon = requireTaxon(id);
         MergedI18n i18n = mergeI18n(id, preferredLocale);
         List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, preferredLocale);
-        List<TaxonMediaDto> media = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(id).stream()
+        long mediaTotal = taxonMediaRepository.countByTaxonId(id);
+        PageRequest mediaPage = PageRequest.of(
+                0,
+                AppConstants.MEDIA_PREVIEW_SIZE,
+                Sort.by(Sort.Direction.ASC, "sortOrder").and(Sort.by(Sort.Direction.ASC, "id")));
+        List<TaxonMediaDto> media = taxonMediaRepository
+                .findByTaxonIdOrderBySortOrderAscIdAsc(id, mediaPage)
+                .getContent()
+                .stream()
                 .map(this::toMediaDto)
                 .toList();
         List<TaxonSynonymDto> synonyms = taxonSynonymRepository.findByTaxonIdOrderByScientificNameAsc(id).stream()
@@ -127,7 +135,28 @@ public class TaxonService {
                 taxon.isAccepted(),
                 breadcrumbs,
                 media,
+                mediaTotal,
                 synonyms);
+    }
+
+    /**
+     * 分页列出分类配图（详情首屏之外的加载更多）。
+     */
+    @Transactional(readOnly = true)
+    public PageResult<TaxonMediaDto> listMedia(Long taxonId, int page, int size) {
+        requireTaxon(taxonId);
+        int safePage = Math.max(page, AppConstants.DEFAULT_PAGE);
+        int safeSize = size <= 0 ? AppConstants.MEDIA_PREVIEW_SIZE : Math.min(size, AppConstants.MAX_PAGE_SIZE);
+        PageRequest mediaPage = PageRequest.of(
+                safePage,
+                safeSize,
+                Sort.by(Sort.Direction.ASC, "sortOrder").and(Sort.by(Sort.Direction.ASC, "id")));
+        Page<TaxonMedia> result = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(taxonId, mediaPage);
+        return PageResult.of(
+                result.getContent().stream().map(this::toMediaDto).toList(),
+                result.getTotalElements(),
+                result.getNumber(),
+                result.getSize());
     }
 
     @Transactional
@@ -139,7 +168,7 @@ public class TaxonService {
             parentRank = parent.getRank();
         }
         if (!TaxonRankRules.isValidParent(request.rank(), parentRank)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid parent/child rank combination");
+            throw new BusinessException(ErrorCode.INVALID_PARENT);
         }
         assertUniqueName(parent == null ? null : parent.getId(), request.scientificName());
 
@@ -198,23 +227,23 @@ public class TaxonService {
     public TaxonDetailDto move(Long id, Long newParentId, String locale) {
         Taxon taxon = requireTaxon(id);
         if (taxon.getRank() == TaxonRank.KINGDOM) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Kingdom cannot be moved under a parent");
+            throw new BusinessException(ErrorCode.INVALID_MOVE);
         }
         if (newParentId == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "newParentId is required for non-kingdom taxa");
+            throw new BusinessException(ErrorCode.INVALID_MOVE);
         }
         if (newParentId.equals(id)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot move taxon under itself");
+            throw new BusinessException(ErrorCode.INVALID_MOVE);
         }
 
         Taxon newParent = requireTaxon(newParentId);
         if (!TaxonRankRules.isValidParent(taxon.getRank(), newParent.getRank())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid parent/child rank combination");
+            throw new BusinessException(ErrorCode.INVALID_PARENT);
         }
 
         String oldPath = taxon.getMaterializedPath();
         if (newParent.getMaterializedPath().startsWith(oldPath)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot move taxon under its descendant");
+            throw new BusinessException(ErrorCode.INVALID_MOVE);
         }
 
         Taxon oldParent = taxon.getParent();
@@ -258,7 +287,7 @@ public class TaxonService {
     public void delete(Long id) {
         Taxon taxon = requireTaxon(id);
         if (taxon.getChildCount() > 0) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Cannot delete taxon with children");
+            throw new BusinessException(ErrorCode.TAXON_HAS_CHILDREN);
         }
         List<TaxonMedia> mediaList = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(id);
         for (TaxonMedia media : mediaList) {
@@ -424,7 +453,7 @@ public class TaxonService {
 
     private Taxon requireTaxon(Long id) {
         return taxonRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Taxon not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TAXON_NOT_FOUND));
     }
 
     private void assertUniqueName(Long parentId, String scientificName) {
@@ -432,7 +461,7 @@ public class TaxonService {
                 ? taxonRepository.existsByParentIsNullAndScientificNameIgnoreCase(scientificName.trim())
                 : taxonRepository.existsByParentIdAndScientificNameIgnoreCase(parentId, scientificName.trim());
         if (exists) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Scientific name already exists under the same parent");
+            throw new BusinessException(ErrorCode.DUPLICATE_NAME);
         }
     }
 

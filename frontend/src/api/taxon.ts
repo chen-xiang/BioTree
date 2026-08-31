@@ -1,106 +1,30 @@
 /**
- * 分类相关 API 调用（公开 + 管理）。
+ * 分类相关 API 调用（公开 + 管理），基于 openapi-fetch。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加配图上传与删除接口
  * Updated: 2026-08-31 支持 AbortSignal、节点移动
+ * Updated: 2026-08-31 切换 openapi-fetch；配图分页
  */
 import { getCsrfHeaders } from '@/utils/csrf'
-import type { ApiResponse } from './client'
+import { apiClient, unwrap } from './client'
+import type { components } from './schema'
 
-export type TaxonRank =
-  | 'KINGDOM'
-  | 'PHYLUM'
-  | 'CLASS'
-  | 'ORDER'
-  | 'FAMILY'
-  | 'GENUS'
-  | 'SPECIES'
-
-export type TaxonListItem = {
-  id: number
-  rank: TaxonRank
-  scientificName: string
-  commonName: string | null
-  childCount: number
-  hasChildren: boolean
-}
-
+export type TaxonRank = components['schemas']['TaxonRank']
+export type TaxonListItem = components['schemas']['TaxonListItem']
 export type PageResult<T> = {
   items: T[]
   total: number
   page: number
   size: number
 }
-
-export type TaxonBreadcrumb = {
-  id: number
-  rank: TaxonRank
-  scientificName: string
-  commonName: string | null
-}
-
-export type TaxonMedia = {
-  id: number
-  url: string
-  mimeType: string | null
-  width?: number | null
-  height?: number | null
-  sortOrder?: number
-  locale?: string | null
-  caption: string | null
-  license?: string | null
-  attribution?: string | null
-}
-
-export type TaxonDetail = {
-  id: number
-  parentId: number | null
-  rank: TaxonRank
-  scientificName: string
-  commonName: string | null
-  summary: string | null
-  description: string | null
-  locale: string
-  childCount: number
-  accepted: boolean
-  breadcrumbs: TaxonBreadcrumb[]
-  media: TaxonMedia[]
-  synonyms: TaxonSynonym[]
-}
-
-export type TaxonSynonym = {
-  id: number
-  scientificName: string
-}
-
-export type CreateTaxonPayload = {
-  parentId?: number | null
-  rank: TaxonRank
-  scientificName: string
-  locale?: string
-  commonName?: string
-  summary?: string
-  description?: string
-}
-
-export type UpdateTaxonPayload = {
-  scientificName: string
-  accepted?: boolean
-  locale?: string
-  commonName?: string
-  summary?: string
-  description?: string
-}
-
-async function parseJson<T>(response: Response): Promise<ApiResponse<T>> {
-  const body = (await response.json()) as ApiResponse<T>
-  if (!response.ok || body.code !== 0) {
-    throw new Error(body.message || `Request failed: ${response.status}`)
-  }
-  return body
-}
+export type TaxonBreadcrumb = components['schemas']['TaxonBreadcrumb']
+export type TaxonMedia = components['schemas']['TaxonMedia']
+export type TaxonSynonym = components['schemas']['TaxonSynonym']
+export type TaxonDetail = components['schemas']['TaxonDetail']
+export type CreateTaxonPayload = components['schemas']['CreateTaxonRequest']
+export type UpdateTaxonPayload = components['schemas']['UpdateTaxonRequest']
 
 export async function fetchChildren(
   parentId: number | null,
@@ -109,16 +33,18 @@ export async function fetchChildren(
   size = 30,
   signal?: AbortSignal,
 ): Promise<PageResult<TaxonListItem>> {
-  const params = new URLSearchParams({
-    locale,
-    page: String(page),
-    size: String(size),
+  const result = await apiClient.GET('/api/taxa/children', {
+    params: {
+      query: {
+        parentId: parentId ?? undefined,
+        locale,
+        page,
+        size,
+      },
+    },
+    signal,
   })
-  if (parentId != null) {
-    params.set('parentId', String(parentId))
-  }
-  const response = await fetch(`/api/taxa/children?${params}`, { credentials: 'include', signal })
-  return (await parseJson<PageResult<TaxonListItem>>(response)).data
+  return unwrap(result)
 }
 
 export async function fetchTaxonDetail(
@@ -126,9 +52,24 @@ export async function fetchTaxonDetail(
   locale: string,
   signal?: AbortSignal,
 ): Promise<TaxonDetail> {
-  const params = new URLSearchParams({ locale })
-  const response = await fetch(`/api/taxa/${id}?${params}`, { credentials: 'include', signal })
-  return (await parseJson<TaxonDetail>(response)).data
+  const result = await apiClient.GET('/api/taxa/{id}', {
+    params: { path: { id }, query: { locale } },
+    signal,
+  })
+  return unwrap(result)
+}
+
+export async function fetchTaxonMedia(
+  id: number,
+  page = 0,
+  size = 12,
+  signal?: AbortSignal,
+): Promise<PageResult<TaxonMedia>> {
+  const result = await apiClient.GET('/api/taxa/{id}/media', {
+    params: { path: { id }, query: { page, size } },
+    signal,
+  })
+  return unwrap(result)
 }
 
 export async function searchTaxa(
@@ -138,56 +79,45 @@ export async function searchTaxa(
   size = 30,
   signal?: AbortSignal,
 ): Promise<PageResult<TaxonListItem>> {
-  const params = new URLSearchParams({
-    q,
-    locale,
-    page: String(page),
-    size: String(size),
+  const result = await apiClient.GET('/api/taxa/search', {
+    params: { query: { q, locale, page, size } },
+    signal,
   })
-  const response = await fetch(`/api/taxa/search?${params}`, { credentials: 'include', signal })
-  return (await parseJson<PageResult<TaxonListItem>>(response)).data
+  return unwrap(result)
 }
 
 export async function createTaxon(payload: CreateTaxonPayload): Promise<TaxonDetail> {
-  const response = await fetch('/api/admin/taxa', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-    body: JSON.stringify(payload),
+  const result = await apiClient.POST('/api/admin/taxa', {
+    body: payload,
+    headers: { ...getCsrfHeaders() },
   })
-  return (await parseJson<TaxonDetail>(response)).data
+  return unwrap(result)
 }
 
 export async function updateTaxon(id: number, payload: UpdateTaxonPayload): Promise<TaxonDetail> {
-  const response = await fetch(`/api/admin/taxa/${id}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-    body: JSON.stringify(payload),
+  const result = await apiClient.PUT('/api/admin/taxa/{id}', {
+    params: { path: { id } },
+    body: payload,
+    headers: { ...getCsrfHeaders() },
   })
-  return (await parseJson<TaxonDetail>(response)).data
+  return unwrap(result)
 }
 
 export async function moveTaxon(id: number, newParentId: number, locale?: string): Promise<TaxonDetail> {
-  const params = new URLSearchParams()
-  if (locale) params.set('locale', locale)
-  const qs = params.toString()
-  const response = await fetch(`/api/admin/taxa/${id}/move${qs ? `?${qs}` : ''}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-    body: JSON.stringify({ newParentId }),
+  const result = await apiClient.POST('/api/admin/taxa/{id}/move', {
+    params: { path: { id }, query: locale ? { locale } : undefined },
+    body: { newParentId },
+    headers: { ...getCsrfHeaders() },
   })
-  return (await parseJson<TaxonDetail>(response)).data
+  return unwrap(result)
 }
 
 export async function deleteTaxon(id: number): Promise<void> {
-  const response = await fetch(`/api/admin/taxa/${id}`, {
-    method: 'DELETE',
-    credentials: 'include',
+  const result = await apiClient.DELETE('/api/admin/taxa/{id}', {
+    params: { path: { id } },
     headers: { ...getCsrfHeaders() },
   })
-  await parseJson<null>(response)
+  unwrap(result)
 }
 
 export async function uploadTaxonMedia(
@@ -201,20 +131,26 @@ export async function uploadTaxonMedia(
   if (options?.caption) form.append('caption', options.caption)
   if (options?.license) form.append('license', options.license)
   if (options?.attribution) form.append('attribution', options.attribution)
-  const response = await fetch(`/api/admin/taxa/${taxonId}/media`, {
-    method: 'POST',
-    credentials: 'include',
+  const result = await apiClient.POST('/api/admin/taxa/{taxonId}/media', {
+    params: { path: { taxonId } },
+    // openapi-fetch 对 multipart 接受 FormData
+    body: form as unknown as {
+      file: string
+      locale?: string
+      caption?: string
+      license?: string
+      attribution?: string
+    },
     headers: { ...getCsrfHeaders() },
-    body: form,
+    bodySerializer: (body) => body as unknown as FormData,
   })
-  return (await parseJson<TaxonMedia>(response)).data
+  return unwrap(result)
 }
 
 export async function deleteTaxonMedia(taxonId: number, mediaId: number): Promise<void> {
-  const response = await fetch(`/api/admin/taxa/${taxonId}/media/${mediaId}`, {
-    method: 'DELETE',
-    credentials: 'include',
+  const result = await apiClient.DELETE('/api/admin/taxa/{taxonId}/media/{mediaId}', {
+    params: { path: { taxonId, mediaId } },
     headers: { ...getCsrfHeaders() },
   })
-  await parseJson<null>(response)
+  unwrap(result)
 }

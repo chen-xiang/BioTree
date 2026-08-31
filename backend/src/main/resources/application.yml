@@ -77,6 +77,8 @@ app:
   cache:
     # 公开只读 API 的 Cache-Control max-age（秒）；0 表示不缓存
     public-max-age-seconds: 60
+  security:
+    deny-default-admin: false
 
 logging:
   level:

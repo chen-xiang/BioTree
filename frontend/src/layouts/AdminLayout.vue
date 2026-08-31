@@ -1,16 +1,49 @@
 <script setup lang="ts">
 /**
- * 管理后台布局骨架。
+ * 管理后台布局：侧栏导航、当前用户与登出。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加分类管理侧栏入口
+ * Updated: 2026-08-31 展示当前用户并支持登出
  */
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { fetchMe, logout } from '@/api/auth'
 import AppTopbar from '@/components/layout/AppTopbar.vue'
+import BtButton from '@/components/ui/BtButton.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
+import { ensureCsrfCookie } from '@/utils/csrf'
 
 const { t } = useI18n()
+const auth = useAuthStore()
+const toast = useToastStore()
+const router = useRouter()
+const busy = ref(false)
+
+onMounted(async () => {
+  if (!auth.username) {
+    const name = await fetchMe()
+    if (name) auth.setUser(name)
+  }
+})
+
+async function onLogout() {
+  busy.value = true
+  try {
+    await ensureCsrfCookie()
+    await logout()
+    auth.clear()
+    toast.push(t('admin.loggedOut'), 'ok')
+    await router.push({ name: 'login' })
+  } catch (e) {
+    toast.push(e instanceof Error ? e.message : t('common.failed'), 'error')
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -19,8 +52,12 @@ const { t } = useI18n()
     <div class="shell">
       <aside class="side">
         <p class="side-title">{{ t('admin.title') }}</p>
+        <p v-if="auth.username" class="user">{{ auth.username }}</p>
         <RouterLink class="side-link" to="/admin">{{ t('nav.admin') }}</RouterLink>
         <RouterLink class="side-link" to="/admin/taxa">{{ t('admin.taxaNav') }}</RouterLink>
+        <BtButton class="logout" variant="ghost" :disabled="busy" @click="onLogout">
+          {{ t('admin.logout') }}
+        </BtButton>
       </aside>
       <main class="main">
         <RouterView />
@@ -47,9 +84,15 @@ const { t } = useI18n()
 }
 
 .side-title {
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-2);
   font-family: var(--font-display);
   font-size: var(--text-lg);
+}
+
+.user {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .side-link {
@@ -62,6 +105,11 @@ const { t } = useI18n()
 .side-link.router-link-active,
 .side-link:hover {
   color: var(--color-text);
+}
+
+.logout {
+  margin-top: var(--space-4);
+  width: 100%;
 }
 
 .main {
