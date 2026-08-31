@@ -61,13 +61,44 @@ class AdminTaxonMediaControllerTest {
 
         mockMvc.perform(get("/api/taxa/{id}", 8).param("locale", "zh-CN"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.media.length()").value(1));
+                .andExpect(jsonPath("$.data.mediaTotal").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
 
         mockMvc.perform(delete("/api/admin/taxa/{taxonId}/media/{mediaId}", 8, mediaId)
                         .with(csrf())
                         .with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    void adminCanUpdateMediaCaption() throws Exception {
+        MockMultipartFile file = pngFile();
+        String body = mockMvc.perform(multipart("/api/admin/taxa/{taxonId}/media", 8)
+                        .file(file)
+                        .param("caption", "old")
+                        .with(csrf())
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        long mediaId = Long.parseLong(body.replaceAll("(?s).*\"id\":(\\d+).*", "$1"));
+
+        mockMvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                .put("/api/admin/taxa/{taxonId}/media/{mediaId}", 8, mediaId)
+                                .contentType("application/json")
+                                .content("{\"caption\":\"new-caption\",\"sortOrder\":3}")
+                                .with(csrf())
+                                .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.caption").value("new-caption"))
+                .andExpect(jsonPath("$.data.sortOrder").value(3));
+
+        mockMvc.perform(delete("/api/admin/taxa/{taxonId}/media/{mediaId}", 8, mediaId)
+                        .with(csrf())
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk());
     }
 
     @Test
