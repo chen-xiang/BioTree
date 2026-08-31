@@ -10,7 +10,7 @@
 - 性能设计：[docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - 真实数据导入：[docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)
 - 改进优化实施方案：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)
-- Windows 脚本：见下方「脚本」；全量导入 `scripts/import-col-full.bat`
+- Windows / Linux 脚本：见下方「脚本」；全量导入 `scripts/import-col-full.{bat,sh}`
 
 ## 工程结构
 
@@ -18,25 +18,25 @@
 backend/    Spring Boot 3（Gradle）· MySQL · Flyway · Session/CSRF
 frontend/   Vue 3 · Vite · TypeScript · Pinia · vue-i18n
 docs/       设计与规范文档
-scripts/    Windows 开发 / 导入 / 统计 bat
+scripts/    开发 / 导入 / 统计脚本（.bat + .sh）
 ```
 
-## 脚本（Windows）
+## 脚本
 
-在仓库根目录执行，或资源管理器中双击。`scripts\help.bat` 可打印完整列表。
+仓库根目录执行。`./scripts/help.sh` 或 `scripts\help.bat` 可打印完整列表。
 
-| 脚本 | 作用 |
-| --- | --- |
-| `scripts\web-dev.bat` | 启动前端 Vite（http://localhost:5173） |
-| `scripts\server-dev.bat` | 启动后端 Spring Boot（http://localhost:8080） |
-| `scripts\install-frontend.bat` | `pnpm install` |
-| `scripts\test-backend.bat` | 后端 `gradlew test` |
-| `scripts\test-frontend.bat` | 前端 typecheck / lint / test / build |
-| `scripts\test-all.bat` | 先后端后前端检查 |
-| `scripts\openapi-generate.bat` | 从 `openapi.yaml` 生成类型；加参数 `live` 则从运行中的后端拉取 |
-| `scripts\count-loc.bat` | 源码行数统计（优先 cloc，否则 PowerShell） |
-| `scripts\import-col-full.bat` | CoL 全量导入（replace） |
-| `scripts\import-col-resume.bat` | CoL 断点续跑 |
+| 作用 | Linux / macOS | Windows |
+| --- | --- | --- |
+| 启动前端 Vite | `./scripts/web-dev.sh` | `scripts\web-dev.bat` |
+| 启动后端 Spring Boot | `./scripts/server-dev.sh` | `scripts\server-dev.bat` |
+| 安装前端依赖 | `./scripts/install-frontend.sh` | `scripts\install-frontend.bat` |
+| 后端测试 | `./scripts/test-backend.sh` | `scripts\test-backend.bat` |
+| 前端检查（typecheck/lint/test/build） | `./scripts/test-frontend.sh` | `scripts\test-frontend.bat` |
+| 全部检查 | `./scripts/test-all.sh` | `scripts\test-all.bat` |
+| 生成 OpenAPI 类型 | `./scripts/openapi-generate.sh` [`live`] | `scripts\openapi-generate.bat` [`live`] |
+| 源码行数统计 | `./scripts/count-loc.sh` | `scripts\count-loc.bat` |
+| CoL 全量导入 | `./scripts/import-col-full.sh` | `scripts\import-col-full.bat` |
+| CoL 断点续跑 | `./scripts/import-col-resume.sh` | `scripts\import-col-resume.bat` |
 
 开发时请开两个终端分别跑 `server-dev` 与 `web-dev`。
 ## 已实现能力
