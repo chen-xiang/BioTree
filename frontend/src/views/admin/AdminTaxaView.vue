@@ -7,6 +7,7 @@
  * Updated: 2026-08-31 支持编辑态配图上传与删除
  * Updated: 2026-08-31 支持节点移动与设计系统表单控件
  * Updated: 2026-08-31 搜索导航、面包屑、任意父移动、图注更新
+ * Updated: 2026-08-31 完整阶元管理（view=full）与中间级等级
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -39,7 +40,29 @@ import { debounce } from '@/utils/debounce'
 
 type Crumb = { id: number | null; label: string }
 
-const RANKS: TaxonRank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES']
+/** 管理端按完整阶元编辑；主级在前，中间级随后 */
+const RANKS: TaxonRank[] = [
+  'KINGDOM',
+  'SUBKINGDOM',
+  'PHYLUM',
+  'SUBPHYLUM',
+  'CLASS',
+  'SUBCLASS',
+  'ORDER',
+  'SUBORDER',
+  'SUPERFAMILY',
+  'FAMILY',
+  'SUBFAMILY',
+  'TRIBE',
+  'GENUS',
+  'SUBGENUS',
+  'SPECIES',
+  'SUBSPECIES',
+  'VARIETY',
+  'FORM',
+  'OTHER',
+]
+const ADMIN_VIEW = 'full' as const
 const PAGE_SIZE = 30
 const SEARCH_SIZE = 15
 
@@ -83,7 +106,14 @@ const form = reactive({
 async function loadList(page = 0) {
   error.value = ''
   try {
-    const result = await fetchChildren(parentId.value, apiLocale.value, page, PAGE_SIZE)
+    const result = await fetchChildren(
+      parentId.value,
+      apiLocale.value,
+      page,
+      PAGE_SIZE,
+      undefined,
+      ADMIN_VIEW,
+    )
     items.value = result.items
     listPage.value = result.page
     listTotal.value = result.total
@@ -127,7 +157,7 @@ async function hydrateEditing(detail: TaxonDetail) {
 
 async function startEdit(id: number) {
   try {
-    const detail = await fetchTaxonDetail(id, apiLocale.value)
+    const detail = await fetchTaxonDetail(id, apiLocale.value, undefined, ADMIN_VIEW)
     await hydrateEditing(detail)
   } catch (e) {
     error.value = messageFromApiError(e)
@@ -138,7 +168,7 @@ async function startEdit(id: number) {
 /** 从搜索结果跳转：定位到其父级列表并打开编辑 */
 async function jumpFromSearch(item: TaxonListItem) {
   try {
-    const detail = await fetchTaxonDetail(item.id, apiLocale.value)
+    const detail = await fetchTaxonDetail(item.id, apiLocale.value, undefined, ADMIN_VIEW)
     const crumbs: Crumb[] = [{ id: null, label: t('admin.root') }]
     for (const c of detail.breadcrumbs) {
       if (c.id === detail.id) continue
@@ -458,6 +488,12 @@ watch(moveQuery, () => debouncedMoveSearch())
           <span>{{ t('admin.scientificName') }}</span>
           <BtInput v-model="form.scientificName" :required="true" />
         </label>
+        <p v-if="editing?.scientificNameAuthorship" class="muted authorship">
+          {{ t('admin.authorship') }}: {{ editing.scientificNameAuthorship }}
+        </p>
+        <p v-if="editing?.rankRaw" class="muted">
+          {{ t('admin.rankRaw') }}: {{ editing.rankRaw }}
+        </p>
         <label>
           <span>{{ t('admin.commonName') }}</span>
           <BtInput v-model="form.commonName" />

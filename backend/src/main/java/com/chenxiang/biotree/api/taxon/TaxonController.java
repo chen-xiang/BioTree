@@ -1,9 +1,10 @@
 /**
- * 公开分类查询接口：子节点、详情、搜索、配图分页。
+ * 公开分类查询接口：子节点、详情、搜索、配图分页；支持 view=simple|full。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 配图分页接口
+ * Updated: 2026-08-31 增加 view 投影参数（R3）
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -11,6 +12,7 @@ import com.chenxiang.biotree.api.common.ApiResponse;
 import com.chenxiang.biotree.api.common.PageResult;
 import com.chenxiang.biotree.application.AppConstants;
 import com.chenxiang.biotree.application.TaxonService;
+import com.chenxiang.biotree.domain.taxon.TaxonView;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,8 +34,10 @@ public class TaxonController {
             @RequestParam(required = false) Long parentId,
             @RequestParam(required = false, defaultValue = AppConstants.DEFAULT_LOCALE) String locale,
             @RequestParam(required = false, defaultValue = "0") int page,
-            @RequestParam(required = false, defaultValue = "30") int size) {
-        return ApiResponse.ok(taxonService.listChildren(parentId, locale, page, size));
+            @RequestParam(required = false, defaultValue = "30") int size,
+            @RequestParam(required = false, defaultValue = "simple") String view) {
+        return ApiResponse.ok(
+                taxonService.listChildren(parentId, locale, page, size, TaxonView.fromParam(view)));
     }
 
     @GetMapping("/search")
@@ -48,8 +52,9 @@ public class TaxonController {
     @GetMapping("/{id}")
     public ApiResponse<TaxonDetailDto> detail(
             @PathVariable Long id,
-            @RequestParam(required = false, defaultValue = AppConstants.DEFAULT_LOCALE) String locale) {
-        return ApiResponse.ok(taxonService.getDetail(id, locale));
+            @RequestParam(required = false, defaultValue = AppConstants.DEFAULT_LOCALE) String locale,
+            @RequestParam(required = false, defaultValue = "simple") String view) {
+        return ApiResponse.ok(taxonService.getDetail(id, locale, TaxonView.fromParam(view)));
     }
 
     @GetMapping("/{id}/media")

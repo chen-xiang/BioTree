@@ -14,5 +14,6 @@ public record TaxonListItemDto(
         String scientificName,
         String commonName,
         int childCount,
-        boolean hasChildren) {
+        boolean hasChildren,
+        String rankRaw) {
 }

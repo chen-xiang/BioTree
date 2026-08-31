@@ -116,7 +116,12 @@ public class ColDwcaImporter {
             if (phaseOrder(phase) <= phaseOrder(PHASE_STAGE) || !stagingHasTaxa()) {
                 checkpointRepository.upsert(jobKey, PHASE_STAGE, 0, null, "streaming");
                 StageCounts stageCounts = stageFromArchive(
-                        zip, kingdoms, properties.getMaxPerRank(), properties.isImportSynonyms(), batchSize);
+                        zip,
+                        kingdoms,
+                        properties.getMaxPerRank(),
+                        properties.isImportSynonyms(),
+                        properties.isLegacySevenRanks(),
+                        batchSize);
                 for (var e : stageCounts.byRank().entrySet()) {
                     rankCounters.get(e.getKey()).set(e.getValue());
                 }
@@ -182,7 +187,12 @@ public class ColDwcaImporter {
     }
 
     private StageCounts stageFromArchive(
-            ZipFile zip, Set<String> kingdoms, int maxPerRank, boolean collectSynonyms, int batchSize)
+            ZipFile zip,
+            Set<String> kingdoms,
+            int maxPerRank,
+            boolean collectSynonyms,
+            boolean legacySeven,
+            int batchSize)
             throws IOException {
         transactionTemplate.executeWithoutResult(status -> clearStaging());
         ZipEntry taxonEntry = requireEntry(zip, "Taxon.tsv");
@@ -220,6 +230,7 @@ public class ColDwcaImporter {
                 String status = cols[6];
                 String rankRaw = cols[7];
                 String scientificName = cols[8];
+                String authorship = cols.length > 9 ? emptyToNull(cols[9]) : null;
                 String genericName = cols.length > 11 ? cols[11] : "";
                 String specificEpithet = cols.length > 13 ? cols[13] : "";
                 String kingdom = cols[20];
@@ -259,7 +270,7 @@ public class ColDwcaImporter {
                     continue;
                 }
 
-                var rankOpt = ColNameUtils.mapRank(rankRaw);
+                var rankOpt = ColNameUtils.mapRank(rankRaw, legacySeven);
                 if (rankOpt.isEmpty()) {
                     continue;
                 }
@@ -271,7 +282,18 @@ public class ColDwcaImporter {
                 if (!StringUtils.hasText(canonical) || canonical.length() > 255) {
                     continue;
                 }
-                taxonBatch.add(new Object[] {taxonId, parentId, rank.name(), canonical, kingdom});
+                if (!StringUtils.hasText(authorship) && StringUtils.hasText(scientificName)) {
+                    String stripped = ColNameUtils.stripAuthorship(scientificName);
+                    if (scientificName.trim().length() > stripped.length()) {
+                        authorship = scientificName.trim().substring(stripped.length()).trim();
+                        if (authorship.startsWith(",")) {
+                            authorship = authorship.substring(1).trim();
+                        }
+                    }
+                }
+                taxonBatch.add(new Object[] {
+                    taxonId, parentId, rank.name(), canonical, kingdom, authorship, rankRaw
+                });
                 counters.get(rank).incrementAndGet();
                 taxonCount.incrementAndGet();
                 if (taxonBatch.size() >= batchSize) {
@@ -308,8 +330,9 @@ public class ColDwcaImporter {
         transactionTemplate.executeWithoutResult(status -> jdbcTemplate.batchUpdate(
                 """
                 INSERT IGNORE INTO import_col_taxon
-                (external_id, parent_external_id, taxon_rank, scientific_name, kingdom)
-                VALUES (?, ?, ?, ?, ?)
+                (external_id, parent_external_id, taxon_rank, scientific_name, kingdom,
+                 scientific_name_authorship, taxon_rank_raw)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 batch));
     }
@@ -337,7 +360,8 @@ public class ColDwcaImporter {
         while (true) {
             List<StagedTaxon> page = jdbcTemplate.query(
                     """
-                    SELECT external_id, parent_external_id, taxon_rank, scientific_name, kingdom
+                    SELECT external_id, parent_external_id, taxon_rank, scientific_name, kingdom,
+                           scientific_name_authorship, taxon_rank_raw
                     FROM import_col_taxon
                     WHERE taxon_rank = ?
                     ORDER BY external_id
@@ -348,7 +372,9 @@ public class ColDwcaImporter {
                             rs.getString(2),
                             TaxonRank.valueOf(rs.getString(3)),
                             rs.getString(4),
-                            rs.getString(5)),
+                            rs.getString(5),
+                            rs.getString(6),
+                            rs.getString(7)),
                     rank.name(),
                     batchSize,
                     offset);
@@ -391,8 +417,9 @@ public class ColDwcaImporter {
                     """
                     INSERT INTO taxon
                     (parent_id, taxon_rank, scientific_name, materialized_path, child_count, is_accepted,
-                     created_at, updated_at, created_by, external_source, external_id)
-                    VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?)
+                     created_at, updated_at, created_by, external_source, external_id,
+                     rank_order, taxon_rank_raw, scientific_name_authorship)
+                    VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?, ?, ?, ?)
                     """;
             jdbcTemplate.execute((java.sql.Connection connection) -> {
                 try (PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
@@ -409,6 +436,13 @@ public class ColDwcaImporter {
                         ps.setTimestamp(6, ts);
                         ps.setString(7, SOURCE_COL);
                         ps.setString(8, item.row().externalId());
+                        ps.setInt(9, item.row().rank().getRankOrder());
+                        ps.setString(10, item.row().rankRaw());
+                        if (item.row().authorship() == null) {
+                            ps.setNull(11, Types.VARCHAR);
+                        } else {
+                            ps.setString(11, item.row().authorship());
+                        }
                         ps.addBatch();
                     }
                     ps.executeBatch();
@@ -764,7 +798,13 @@ public class ColDwcaImporter {
     }
 
     private record StagedTaxon(
-            String externalId, String parentExternalId, TaxonRank rank, String scientificName, String kingdom) {
+            String externalId,
+            String parentExternalId,
+            TaxonRank rank,
+            String scientificName,
+            String kingdom,
+            String authorship,
+            String rankRaw) {
     }
 
     private record PendingInsert(StagedTaxon row, Long parentDbId, String uniqKey) {

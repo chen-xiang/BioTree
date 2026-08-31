@@ -26,6 +26,7 @@ import BtInput from '@/components/ui/BtInput.vue'
 import BtPagination from '@/components/ui/BtPagination.vue'
 import BtVirtualList from '@/components/ui/BtVirtualList.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useTaxonViewStore } from '@/stores/taxonView'
 import { messageFromApiError, rankLabel } from '@/utils/apiError'
 import { debounce } from '@/utils/debounce'
 import { renderMarkdown } from '@/utils/markdown'
@@ -36,6 +37,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
+const taxonViewStore = useTaxonViewStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -56,10 +58,15 @@ const loadingMoreMedia = ref(false)
 const mobilePane = ref<'tree' | 'detail'>('tree')
 
 const apiLocale = computed(() => localeStore.locale)
+const treeView = computed(() => taxonViewStore.view)
 const SEARCH_SIZE = 20
 const MEDIA_PAGE = 12
 const descriptionHtml = computed(() => renderMarkdown(detail.value?.description))
 const hasMoreMedia = computed(() => gallery.value.length < mediaTotal.value)
+const authorshipLine = computed(() => {
+  const a = detail.value?.scientificNameAuthorship
+  return a && a.trim() ? a.trim() : ''
+})
 
 let detailAbort: AbortController | null = null
 let searchAbort: AbortController | null = null
@@ -68,7 +75,7 @@ async function loadRoots() {
   loadingRoots.value = true
   error.value = ''
   try {
-    const page = await fetchChildren(null, apiLocale.value)
+    const page = await fetchChildren(null, apiLocale.value, 0, 30, undefined, treeView.value)
     roots.value = page.items
   } catch (e) {
     error.value = messageFromApiError(e)
@@ -87,7 +94,7 @@ async function loadDetail(id: number, syncRoute = true) {
   detailAbort = new AbortController()
   loadingDetail.value = true
   try {
-    detail.value = await fetchTaxonDetail(id, apiLocale.value, detailAbort.signal)
+    detail.value = await fetchTaxonDetail(id, apiLocale.value, detailAbort.signal, treeView.value)
     gallery.value = [...(detail.value.media ?? [])]
     mediaTotal.value = detail.value.mediaTotal ?? gallery.value.length
   } catch (e) {
@@ -181,6 +188,13 @@ watch(apiLocale, async () => {
   }
 })
 
+watch(treeView, async () => {
+  await loadRoots()
+  if (selectedId.value != null) {
+    await loadDetail(selectedId.value, false)
+  }
+})
+
 watch(query, () => {
   debouncedSearch()
 })
@@ -198,10 +212,28 @@ onBeforeUnmount(() => {
         <h1>{{ t('browse.title') }}</h1>
         <p>{{ t('browse.subtitle') }}</p>
       </div>
-      <form class="search" @submit.prevent="onSearchSubmit">
-        <BtInput v-model="query" :placeholder="t('browse.searchPlaceholder')" />
-        <BtButton type="submit">{{ t('browse.search') }}</BtButton>
-      </form>
+      <div class="head-actions">
+        <div class="view-toggle" role="group" :aria-label="t('browse.viewToggle')">
+          <button
+            type="button"
+            :class="{ active: treeView === 'simple' }"
+            @click="taxonViewStore.setView('simple')"
+          >
+            {{ t('browse.viewSimple') }}
+          </button>
+          <button
+            type="button"
+            :class="{ active: treeView === 'full' }"
+            @click="taxonViewStore.setView('full')"
+          >
+            {{ t('browse.viewFull') }}
+          </button>
+        </div>
+        <form class="search" @submit.prevent="onSearchSubmit">
+          <BtInput v-model="query" :placeholder="t('browse.searchPlaceholder')" />
+          <BtButton type="submit">{{ t('browse.search') }}</BtButton>
+        </form>
+      </div>
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -257,10 +289,11 @@ onBeforeUnmount(() => {
         <p v-if="loadingRoots" class="muted">{{ t('common.loading') }}</p>
         <TaxonTreeNode
           v-for="node in roots"
-          :key="node.id"
+          :key="`${node.id}-${treeView}`"
           :node="node"
           :depth="0"
           :locale="apiLocale"
+          :view="treeView"
           :selected-id="selectedId"
           @select="loadDetail"
         />
@@ -279,6 +312,7 @@ onBeforeUnmount(() => {
             </RouterLink>
           </nav>
           <h2 class="sci">{{ detail.scientificName }}</h2>
+          <p v-if="authorshipLine" class="authorship">{{ authorshipLine }}</p>
           <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
           <p class="meta">{{ rankLabel(detail.rank) }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
@@ -322,6 +356,38 @@ onBeforeUnmount(() => {
   gap: var(--space-4);
   justify-content: space-between;
   align-items: end;
+}
+
+.head-actions {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: end;
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.view-toggle button {
+  border: 0;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.view-toggle button.active {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, var(--color-bg-elevated));
+}
+
+.authorship {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 h1 {

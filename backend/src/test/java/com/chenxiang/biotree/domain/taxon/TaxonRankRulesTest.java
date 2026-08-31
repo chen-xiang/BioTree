@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 适配 rankOrder 规则
  */
 package com.chenxiang.biotree.domain.taxon;
 
@@ -20,8 +21,10 @@ class TaxonRankRulesTest {
     }
 
     @Test
-    void speciesMustBelongToGenus() {
+    void deeperRankMayHangUnderShallower() {
         assertTrue(TaxonRankRules.isValidParent(TaxonRank.SPECIES, TaxonRank.GENUS));
-        assertFalse(TaxonRankRules.isValidParent(TaxonRank.SPECIES, TaxonRank.FAMILY));
+        assertTrue(TaxonRankRules.isValidParent(TaxonRank.SPECIES, TaxonRank.SUBGENUS));
+        assertTrue(TaxonRankRules.isValidParent(TaxonRank.SUBSPECIES, TaxonRank.SPECIES));
+        assertFalse(TaxonRankRules.isValidParent(TaxonRank.GENUS, TaxonRank.SPECIES));
     }
 }
