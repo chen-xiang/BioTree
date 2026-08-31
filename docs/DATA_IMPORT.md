@@ -103,7 +103,12 @@ cd backend
   --app.import.dwca-path=../data/import/col_latest_dwca.zip \
   --app.import.replace=true \
   --app.import.max-per-rank=500 \
-  --app.import.import-vernaculars=true'
+  --app.import.rank-mode=full \
+  --app.import.import-vernaculars=true \
+  --app.import.import-synonyms=true \
+  --app.import.import-descriptions=true \
+  --app.import.import-distributions=true \
+  --app.import.import-media=true'
 ```
 
 ### 试跑结果（本仓库开发环境已验证）
