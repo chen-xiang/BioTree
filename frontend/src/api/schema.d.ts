@@ -236,7 +236,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        put: operations["updateTaxonMedia"];
         post?: never;
         delete: operations["deleteTaxonMedia"];
         options?: never;
@@ -388,6 +388,21 @@ export interface components {
             code?: number;
             message?: string;
             data?: unknown;
+        };
+        ImportStatus: {
+            jobKey?: string;
+            phase?: string;
+            /** Format: int64 */
+            processedCount?: number;
+            /** Format: int64 */
+            totalHint?: number;
+            detail?: string;
+            running?: boolean;
+        };
+        ApiResponseImportStatus: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["ImportStatus"];
         };
     };
     responses: never;
@@ -618,7 +633,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiResponseImportStatus"];
+                };
             };
         };
     };
@@ -743,6 +760,36 @@ export interface operations {
                     caption?: string;
                     license?: string;
                     attribution?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonMedia"];
+                };
+            };
+        };
+    };
+    updateTaxonMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxonId: number;
+                mediaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    caption?: string | null;
+                    sortOrder?: number | null;
                 };
             };
         };

@@ -110,6 +110,28 @@ public class TaxonMediaService {
         log.info("Deleted media id={} taxonId={}", mediaId, taxonId);
     }
 
+    /**
+     * 更新图注与排序（不改二进制）。
+     */
+    @Transactional
+    public TaxonMediaDto update(Long taxonId, Long mediaId, String caption, Integer sortOrder) {
+        TaxonMedia media = taxonMediaRepository
+                .findById(mediaId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA_NOT_FOUND));
+        if (!media.getTaxon().getId().equals(taxonId)) {
+            throw new BusinessException(ErrorCode.MEDIA_NOT_FOUND);
+        }
+        if (caption != null) {
+            media.setCaption(caption.isBlank() ? null : caption.trim());
+        }
+        if (sortOrder != null) {
+            media.setSortOrder(sortOrder);
+        }
+        media = taxonMediaRepository.save(media);
+        log.info("Updated media id={} taxonId={}", mediaId, taxonId);
+        return toDto(media);
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_UPLOAD);
