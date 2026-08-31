@@ -48,6 +48,7 @@ export default {
     otherVernaculars: 'Other vernacular names',
     distributions: 'Distribution',
     publishedIn: 'Published in',
+    jumpedToVisibleAncestor: 'Not visible in simple view — jumped to the nearest Linnaean ancestor',
   },
   theme: {
     light: 'Light',
@@ -64,6 +65,8 @@ export default {
     taxaNav: 'Taxa',
     taxaTitle: 'Manage taxa',
     taxaSubtitle: 'Search to jump, maintain children under a parent, move taxa, and edit media.',
+    previewSimple: 'Simple preview',
+    previewSimpleHint: 'Read-only Linnaean projection for children; edits still use the full tree.',
     root: 'Root (kingdom)',
     currentParent: 'Current parent',
     children: 'Children',

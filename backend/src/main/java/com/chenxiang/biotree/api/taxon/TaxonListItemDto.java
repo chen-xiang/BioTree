@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 childCount 随 view；增加 directChildCount
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -15,5 +16,6 @@ public record TaxonListItemDto(
         String commonName,
         int childCount,
         boolean hasChildren,
-        String rankRaw) {
+        String rankRaw,
+        int directChildCount) {
 }

@@ -35,5 +35,7 @@ public record TaxonDetailDto(
         List<TaxonSynonymDto> synonyms,
         String rankRaw,
         List<TaxonVernacularDto> vernaculars,
-        List<TaxonDistributionDto> distributions) {
+        List<TaxonDistributionDto> distributions,
+        int directChildCount,
+        Long nearestSimpleAncestorId) {
 }

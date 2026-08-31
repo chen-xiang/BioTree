@@ -39,6 +39,8 @@ class SimpleTaxonChildrenCollectorTest {
         Taxon subfamily = taxon(2L, "Felinae", TaxonRank.SUBFAMILY, family);
         Taxon genus = taxon(3L, "Felis", TaxonRank.GENUS, subfamily);
 
+        when(taxonRepository.countBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN))
+                .thenReturn(0L);
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(1L)))
                 .thenReturn(List.of(subfamily));
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(2L)))
@@ -53,9 +55,12 @@ class SimpleTaxonChildrenCollectorTest {
     @Test
     void hasVisibleSimpleChildrenTrueWhenGenusUnderSubfamily() {
         Taxon family = taxon(1L, "Felidae", TaxonRank.FAMILY, null);
+        family.setChildCount(1);
         Taxon subfamily = taxon(2L, "Felinae", TaxonRank.SUBFAMILY, family);
         Taxon genus = taxon(3L, "Felis", TaxonRank.GENUS, subfamily);
 
+        when(taxonRepository.existsBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN)).thenReturn(false);
+        when(taxonRepository.findById(1L)).thenReturn(java.util.Optional.of(family));
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(org.mockito.ArgumentMatchers.<Long>anyList()))
                 .thenReturn(List.of(subfamily), List.of(genus));
 

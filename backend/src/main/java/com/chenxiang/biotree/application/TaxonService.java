@@ -62,6 +62,7 @@ public class TaxonService {
     private final TaxonSearchDao taxonSearchDao;
     private final StorageService storageService;
     private final SimpleTaxonChildrenCollector simpleChildrenCollector;
+    private final SimpleParentRebuilder simpleParentRebuilder;
 
     public TaxonService(
             TaxonRepository taxonRepository,
@@ -71,7 +72,8 @@ public class TaxonService {
             TaxonDistributionRepository taxonDistributionRepository,
             TaxonSearchDao taxonSearchDao,
             StorageService storageService,
-            SimpleTaxonChildrenCollector simpleChildrenCollector) {
+            SimpleTaxonChildrenCollector simpleChildrenCollector,
+            SimpleParentRebuilder simpleParentRebuilder) {
         this.taxonRepository = taxonRepository;
         this.taxonI18nRepository = taxonI18nRepository;
         this.taxonMediaRepository = taxonMediaRepository;
@@ -80,6 +82,7 @@ public class TaxonService {
         this.taxonSearchDao = taxonSearchDao;
         this.storageService = storageService;
         this.simpleChildrenCollector = simpleChildrenCollector;
+        this.simpleParentRebuilder = simpleParentRebuilder;
     }
 
     @Transactional(readOnly = true)
@@ -102,15 +105,23 @@ public class TaxonService {
                     taxa.getNumber(),
                     taxa.getSize());
         }
-        List<Taxon> all = simpleChildrenCollector.collect(parentId);
-        int from = Math.min(pageable.getPageNumber() * pageable.getPageSize(), all.size());
-        int to = Math.min(from + pageable.getPageSize(), all.size());
-        List<Taxon> slice = all.subList(from, to);
+        Page<Taxon> simplePage = simpleChildrenCollector.collectPage(parentId, pageable);
+        if (simplePage.isEmpty() && simpleChildrenCollector.countVisible(parentId) == 0) {
+            List<Taxon> all = simpleChildrenCollector.collect(parentId);
+            int from = Math.min(pageable.getPageNumber() * pageable.getPageSize(), all.size());
+            int to = Math.min(from + pageable.getPageSize(), all.size());
+            List<Taxon> slice = all.subList(from, to);
+            return PageResult.of(
+                    toListItems(slice, resolvedLocale, TaxonView.SIMPLE),
+                    all.size(),
+                    pageable.getPageNumber(),
+                    pageable.getPageSize());
+        }
         return PageResult.of(
-                toListItems(slice, resolvedLocale, TaxonView.SIMPLE),
-                all.size(),
-                pageable.getPageNumber(),
-                pageable.getPageSize());
+                toListItems(simplePage.getContent(), resolvedLocale, TaxonView.SIMPLE),
+                simplePage.getTotalElements(),
+                simplePage.getNumber(),
+                simplePage.getSize());
     }
 
     @Transactional(readOnly = true)
@@ -184,7 +195,7 @@ public class TaxonService {
                 i18n.summary(),
                 i18n.description(),
                 i18n.contentLocale() == null ? preferredLocale : i18n.contentLocale(),
-                taxon.getChildCount(),
+                viewChildCount(taxon, view),
                 taxon.isAccepted(),
                 breadcrumbs,
                 media,
@@ -192,7 +203,36 @@ public class TaxonService {
                 synonyms,
                 taxon.getRankRaw(),
                 vernaculars,
-                distributions);
+                distributions,
+                taxon.getChildCount(),
+                nearestSimpleAncestorId(taxon, view));
+    }
+
+    private Long nearestSimpleAncestorId(Taxon taxon, TaxonView view) {
+        if (view != TaxonView.SIMPLE || SimpleParentSupport.isLinnaean(taxon.getRank())) {
+            return null;
+        }
+        if (taxon.getSimpleParent() != null) {
+            return taxon.getSimpleParent().getId();
+        }
+        List<Long> ancestors = SimpleParentSupport.ancestorIds(taxon.getMaterializedPath(), taxon.getId());
+        if (ancestors.isEmpty()) {
+            return null;
+        }
+        Map<Long, Taxon> byId = taxonRepository.findByIdIn(ancestors).stream()
+                .collect(Collectors.toMap(Taxon::getId, t -> t, (a, b) -> a));
+        return SimpleParentSupport.nearestLinnaeanAncestorId(taxon, byId);
+    }
+
+    private int viewChildCount(Taxon taxon, TaxonView view) {
+        if (view == TaxonView.FULL) {
+            return taxon.getChildCount();
+        }
+        long n = simpleChildrenCollector.countVisible(taxon.getId());
+        if (n > 0) {
+            return (int) Math.min(n, Integer.MAX_VALUE);
+        }
+        return simpleChildrenCollector.hasVisibleSimpleChildren(taxon.getId()) ? 1 : 0;
     }
 
     /**
@@ -245,6 +285,7 @@ public class TaxonService {
                 ? "/" + taxon.getId() + "/"
                 : parent.getMaterializedPath() + taxon.getId() + "/";
         taxon.setMaterializedPath(path);
+        simpleParentRebuilder.assignForNewNode(taxon);
         taxon = taxonRepository.save(taxon);
 
         if (parent != null) {
@@ -336,6 +377,7 @@ public class TaxonService {
         newParent.setUpdatedAt(now);
         taxonRepository.save(newParent);
 
+        simpleParentRebuilder.rebuildSubtree(newPath);
         log.info("Moved taxon id={} to parentId={}", id, newParentId);
         return getDetail(id, LocaleSupport.normalize(locale), TaxonView.FULL);
     }
@@ -405,17 +447,24 @@ public class TaxonService {
         }
         return taxa.stream()
                 .map(t -> {
-                    boolean hasChildren = view == TaxonView.FULL
-                            ? t.getChildCount() > 0
-                            : visibleParents.contains(t.getId());
+                    int direct = t.getChildCount();
+                    int viewCount = view == TaxonView.FULL
+                            ? direct
+                            : (visibleParents.contains(t.getId())
+                                    ? (int) Math.min(
+                                            Math.max(simpleChildrenCollector.countVisible(t.getId()), 1L),
+                                            Integer.MAX_VALUE)
+                                    : 0);
+                    boolean hasChildren = view == TaxonView.FULL ? direct > 0 : viewCount > 0;
                     return new TaxonListItemDto(
                             t.getId(),
                             t.getRank(),
                             t.getScientificName(),
                             commonNames.get(t.getId()),
-                            t.getChildCount(),
+                            viewCount,
                             hasChildren,
-                            t.getRankRaw());
+                            t.getRankRaw(),
+                            direct);
                 })
                 .toList();
     }

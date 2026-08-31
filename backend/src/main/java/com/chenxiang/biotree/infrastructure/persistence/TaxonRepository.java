@@ -9,6 +9,7 @@
 package com.chenxiang.biotree.infrastructure.persistence;
 
 import com.chenxiang.biotree.domain.taxon.Taxon;
+import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -32,6 +33,16 @@ public interface TaxonRepository extends JpaRepository<Taxon, Long> {
     List<Taxon> findByIdIn(Collection<Long> ids);
 
     List<Taxon> findByMaterializedPathStartingWith(String pathPrefix);
+
+    Page<Taxon> findBySimpleParentIdAndRankIn(Long simpleParentId, Collection<TaxonRank> ranks, Pageable pageable);
+
+    Page<Taxon> findBySimpleParentIsNullAndRankIn(Collection<TaxonRank> ranks, Pageable pageable);
+
+    long countBySimpleParentIdAndRankIn(Long simpleParentId, Collection<TaxonRank> ranks);
+
+    long countBySimpleParentIsNullAndRankIn(Collection<TaxonRank> ranks);
+
+    boolean existsBySimpleParentIdAndRankIn(Long simpleParentId, Collection<TaxonRank> ranks);
 
     boolean existsByParentIdAndScientificNameIgnoreCase(Long parentId, String scientificName);
 
