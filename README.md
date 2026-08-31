@@ -60,6 +60,6 @@ pnpm openapi:generate
 
 ## 当前骨架范围
 
-- 后端：统一响应、Security Session、Flyway 初始表、Local/OSS 存储切换接口（Local 已实现）、实体与仓储骨架
-- 前端：Router / Pinia / vue-i18n / 深浅色 Token / 基础按钮与布局 / 登录页与管理占位
-- 尚未实现：分类树业务 API、完整管理 CRUD、OSS SDK、全量导入
+- 后端：统一响应、Security Session、Flyway 初始表与演示分类树、Local/OSS 存储切换接口、公开分类 API（children/详情/搜索）、管理端 CRUD
+- 前端：Router / Pinia / vue-i18n / 深浅色 Token、浏览页懒加载树与搜索、登录与分类管理页
+- 尚未实现：配图上传、OSS SDK、权威库全量导入、列表虚拟滚动优化

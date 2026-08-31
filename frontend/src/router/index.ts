@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 增加浏览页与管理分类 CRUD 路由
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -20,6 +21,11 @@ const router = createRouter({
           component: () => import('@/views/HomeView.vue'),
         },
         {
+          path: 'browse',
+          name: 'browse',
+          component: () => import('@/views/BrowseView.vue'),
+        },
+        {
           path: 'login',
           name: 'login',
           component: () => import('@/views/LoginView.vue'),
@@ -35,6 +41,11 @@ const router = createRouter({
           path: '',
           name: 'admin-home',
           component: () => import('@/views/admin/AdminHomeView.vue'),
+        },
+        {
+          path: 'taxa',
+          name: 'admin-taxa',
+          component: () => import('@/views/admin/AdminTaxaView.vue'),
         },
       ],
     },

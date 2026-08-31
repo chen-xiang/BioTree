@@ -4,6 +4,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 增加分类管理侧栏入口
  */
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -19,6 +20,7 @@ const { t } = useI18n()
       <aside class="side">
         <p class="side-title">{{ t('admin.title') }}</p>
         <RouterLink class="side-link" to="/admin">{{ t('nav.admin') }}</RouterLink>
+        <RouterLink class="side-link" to="/admin/taxa">{{ t('admin.taxaNav') }}</RouterLink>
       </aside>
       <main class="main">
         <RouterView />
@@ -52,6 +54,7 @@ const { t } = useI18n()
 
 .side-link {
   display: block;
+  margin-bottom: var(--space-2);
   color: var(--color-text-muted);
   transition: color var(--duration-fast) var(--ease-out);
 }

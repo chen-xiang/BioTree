@@ -27,6 +27,7 @@ const locale = useLocaleStore()
     <RouterLink class="brand" to="/">{{ t('common.brand') }}</RouterLink>
     <nav class="nav">
       <RouterLink to="/">{{ t('nav.home') }}</RouterLink>
+      <RouterLink to="/browse">{{ t('nav.browse') }}</RouterLink>
       <RouterLink to="/admin">{{ t('nav.admin') }}</RouterLink>
     </nav>
     <div class="actions">

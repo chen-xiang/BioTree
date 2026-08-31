@@ -36,10 +36,10 @@ onMounted(async () => {
     <h1>{{ t('home.headline') }}</h1>
     <p class="subtitle">{{ t('home.subtitle') }}</p>
     <div class="cta">
-      <RouterLink to="/">
+      <RouterLink to="/browse">
         <BtButton>{{ t('home.ctaBrowse') }}</BtButton>
       </RouterLink>
-      <RouterLink to="/admin">
+      <RouterLink to="/admin/taxa">
         <BtButton variant="ghost">{{ t('home.ctaAdmin') }}</BtButton>
       </RouterLink>
     </div>
