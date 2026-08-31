@@ -1,0 +1,109 @@
+/**
+ * 设计系统 Token：颜色、字体、间距、圆角、动效（深浅色语义）。
+ *
+ * Author: chen-xiang
+ * Created: 2026-08-31
+ */
+:root {
+  color-scheme: light;
+
+  --font-sans: "Source Sans 3", "Noto Sans SC", "Segoe UI", sans-serif;
+  --font-display: "Fraunces", "Noto Serif SC", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+
+  --shadow-sm: 0 1px 2px rgb(20 40 30 / 0.08);
+  --shadow-md: 0 8px 24px rgb(20 40 30 / 0.12);
+
+  --duration-fast: 150ms;
+  --duration-normal: 240ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --color-bg: #f3f6f2;
+  --color-bg-elevated: #ffffff;
+  --color-bg-muted: #e7eee6;
+  --color-border: #c9d5c8;
+  --color-text: #15231b;
+  --color-text-muted: #4d6356;
+  --color-primary: #1f6b4a;
+  --color-primary-contrast: #f5fff8;
+  --color-accent: #b45309;
+  --color-danger: #b42318;
+  --color-hero-glow: radial-gradient(circle at 20% 20%, #d9f0e2 0%, transparent 45%),
+    radial-gradient(circle at 80% 0%, #f3e7d3 0%, transparent 40%),
+    linear-gradient(160deg, #eef5ee, #f7f3ea);
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --color-bg: #0f1612;
+  --color-bg-elevated: #18211b;
+  --color-bg-muted: #223028;
+  --color-border: #314338;
+  --color-text: #e8f2eb;
+  --color-text-muted: #9bb3a5;
+  --color-primary: #5dcea0;
+  --color-primary-contrast: #07150f;
+  --color-accent: #f0b429;
+  --color-danger: #f97066;
+  --color-hero-glow: radial-gradient(circle at 15% 10%, #1d3b2d 0%, transparent 42%),
+    radial-gradient(circle at 85% 0%, #3a2d16 0%, transparent 38%),
+    linear-gradient(160deg, #121a15, #0f1612);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 10px 28px rgb(0 0 0 / 0.45);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  background-image: var(--color-hero-glow);
+  background-attachment: fixed;
+  transition: background-color var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
