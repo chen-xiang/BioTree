@@ -16,6 +16,10 @@ bin/
 .vscode/*
 !.vscode/extensions.json
 
+# 保留 Gradle Wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+
 # Node / 前端
 node_modules/
 frontend/dist/
