@@ -14,7 +14,9 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { login } from '@/api/auth'
 import BtButton from '@/components/ui/BtButton.vue'
+import BtInput from '@/components/ui/BtInput.vue'
 import { useAuthStore } from '@/stores/auth'
 import { ensureCsrfCookie } from '@/utils/csrf'
 
@@ -32,21 +34,12 @@ async function onSubmit() {
   error.value = ''
   try {
     await ensureCsrfCookie()
-    const response = await fetch('/api/admin/auth/login', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value, password: password.value }),
-    })
-    const body = await response.json()
-    if (!response.ok || body.code !== 0) {
-      throw new Error(body.message || 'login failed')
-    }
-    auth.setUser(body.data.username)
+    const name = await login(username.value, password.value)
+    auth.setUser(name)
     await ensureCsrfCookie()
     await router.push('/admin')
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'login failed'
+    error.value = e instanceof Error ? e.message : t('common.failed')
   } finally {
     loading.value = false
   }
@@ -59,11 +52,11 @@ async function onSubmit() {
     <form class="form" @submit.prevent="onSubmit">
       <label>
         <span>{{ t('login.username') }}</span>
-        <input v-model="username" autocomplete="username" required />
+        <BtInput v-model="username" autocomplete="username" :required="true" />
       </label>
       <label>
         <span>{{ t('login.password') }}</span>
-        <input v-model="password" type="password" autocomplete="current-password" required />
+        <BtInput v-model="password" type="password" autocomplete="current-password" :required="true" />
       </label>
       <p v-if="error" class="error">{{ error }}</p>
       <BtButton type="submit" :disabled="loading">{{ t('login.submit') }}</BtButton>

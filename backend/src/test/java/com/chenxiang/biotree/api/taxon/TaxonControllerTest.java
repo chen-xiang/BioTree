@@ -40,7 +40,17 @@ class TaxonControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.scientificName").value("Homo sapiens"))
                 .andExpect(jsonPath("$.data.commonName").value("智人"))
-                .andExpect(jsonPath("$.data.breadcrumbs.length()").value(7));
+                .andExpect(jsonPath("$.data.breadcrumbs.length()").value(7))
+                .andExpect(jsonPath("$.data.mediaTotal").exists());
+    }
+
+    @Test
+    void shouldListMediaPaged() throws Exception {
+        mockMvc.perform(get("/api/taxa/{id}/media", 8).param("page", "0").param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.items").isArray());
     }
 
     @Test

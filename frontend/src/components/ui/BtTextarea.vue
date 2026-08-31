@@ -1,5 +1,5 @@
 /**
- * 文本输入框。
+ * 多行文本框。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
@@ -8,19 +8,15 @@
 withDefaults(
   defineProps<{
     modelValue?: string
-    type?: string
+    rows?: number
     placeholder?: string
     disabled?: boolean
-    id?: string
-    required?: boolean
-    autocomplete?: string
   }>(),
   {
     modelValue: '',
-    type: 'text',
+    rows: 4,
     placeholder: '',
     disabled: false,
-    required: false,
   },
 )
 
@@ -30,39 +26,31 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <input
-    class="bt-input"
-    :id="id"
-    :type="type"
+  <textarea
+    class="bt-textarea"
+    :rows="rows"
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
-    :required="required"
-    :autocomplete="autocomplete"
-    @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+    @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
   />
 </template>
 
 <style scoped>
-.bt-input {
+.bt-textarea {
   width: 100%;
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
   color: var(--color-text);
   font: inherit;
+  resize: vertical;
 }
 
-.bt-input:focus {
+.bt-textarea:focus {
   outline: 2px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
   outline-offset: 1px;
   border-color: var(--color-primary);
-}
-
-.bt-input:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 </style>

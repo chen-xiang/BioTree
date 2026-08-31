@@ -1,8 +1,9 @@
 /**
- * 公开分类查询接口：子节点、详情、搜索。
+ * 公开分类查询接口：子节点、详情、搜索、配图分页。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 配图分页接口
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -49,5 +50,13 @@ public class TaxonController {
             @PathVariable Long id,
             @RequestParam(required = false, defaultValue = AppConstants.DEFAULT_LOCALE) String locale) {
         return ApiResponse.ok(taxonService.getDetail(id, locale));
+    }
+
+    @GetMapping("/{id}/media")
+    public ApiResponse<PageResult<TaxonMediaDto>> media(
+            @PathVariable Long id,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "12") int size) {
+        return ApiResponse.ok(taxonService.listMedia(id, page, size));
     }
 }

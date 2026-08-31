@@ -1,0 +1,36 @@
+/**
+ * 生产环境配置：Secure Cookie、收紧 API 文档、禁用默认宽松项。
+ *
+ * Author: chen-xiang
+ * Created: 2026-08-31
+ */
+spring:
+  servlet:
+    session:
+      cookie:
+        secure: true
+        same-site: lax
+  flyway:
+    locations: classpath:db/migration,classpath:db/migration-mysql
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+app:
+  cors:
+    # 生产请改为真实前端源
+    allowed-origins: ${APP_CORS_ORIGINS:https://example.com}
+  cache:
+    public-max-age-seconds: 120
+  storage:
+    type: ${APP_STORAGE_TYPE:oss}
+  security:
+    deny-default-admin: true
+
+logging:
+  level:
+    root: WARN
+    com.chenxiang.biotree: INFO

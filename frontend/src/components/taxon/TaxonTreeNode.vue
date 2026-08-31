@@ -13,6 +13,7 @@ import type { TaxonListItem } from '@/api/taxon'
 import { fetchChildren } from '@/api/taxon'
 import BtButton from '@/components/ui/BtButton.vue'
 import BtVirtualList from '@/components/ui/BtVirtualList.vue'
+import { rankLabel } from '@/utils/apiError'
 
 const props = defineProps<{
   node: TaxonListItem
@@ -103,7 +104,7 @@ watch(
         <strong>{{ node.scientificName }}</strong>
         <em v-if="node.commonName">{{ node.commonName }}</em>
       </span>
-      <span class="rank">{{ node.rank }}</span>
+      <span class="rank">{{ rankLabel(node.rank) }}</span>
     </button>
     <p v-if="loading" class="hint">…</p>
     <div v-if="expanded" class="kids">

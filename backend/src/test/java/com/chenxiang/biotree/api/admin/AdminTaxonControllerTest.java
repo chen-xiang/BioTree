@@ -67,6 +67,6 @@ class AdminTaxonControllerTest {
     void cannotDeleteTaxonWithChildren() throws Exception {
         mockMvc.perform(delete("/api/admin/taxa/{id}", 1).with(csrf()).with(user("admin").roles("ADMIN")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(40900));
+                .andExpect(jsonPath("$.code").value(40901));
     }
 }

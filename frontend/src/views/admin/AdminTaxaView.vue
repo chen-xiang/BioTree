@@ -15,6 +15,7 @@ import {
   deleteTaxonMedia,
   fetchChildren,
   fetchTaxonDetail,
+  fetchTaxonMedia,
   moveTaxon,
   updateTaxon,
   uploadTaxonMedia,
@@ -23,25 +24,37 @@ import {
   type TaxonRank,
 } from '@/api/taxon'
 import BtButton from '@/components/ui/BtButton.vue'
+import BtDialog from '@/components/ui/BtDialog.vue'
 import BtInput from '@/components/ui/BtInput.vue'
+import BtPagination from '@/components/ui/BtPagination.vue'
 import BtSelect from '@/components/ui/BtSelect.vue'
+import BtTextarea from '@/components/ui/BtTextarea.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useToastStore } from '@/stores/toast'
+import { messageFromApiError, rankLabel } from '@/utils/apiError'
 
 const RANKS: TaxonRank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES']
+const PAGE_SIZE = 30
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
+const toast = useToastStore()
 const apiLocale = computed(() => localeStore.locale)
-const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rank })))
+const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rankLabel(rank) })))
 
 const parentId = ref<number | null>(null)
 const parentLabel = ref(t('admin.root'))
 const items = ref<TaxonListItem[]>([])
+const listPage = ref(0)
+const listTotal = ref(0)
 const editing = ref<TaxonDetail | null>(null)
 const error = ref('')
 const message = ref('')
 const uploading = ref(false)
 const mediaCaption = ref('')
+const confirmOpen = ref(false)
+const confirmKind = ref<'taxon' | 'media'>('taxon')
+const confirmTargetId = ref<number | null>(null)
 
 const form = reactive({
   rank: 'KINGDOM' as TaxonRank,
@@ -51,21 +64,29 @@ const form = reactive({
   description: '',
 })
 
-async function loadList() {
+async function loadList(page = 0) {
   error.value = ''
-  const page = await fetchChildren(parentId.value, apiLocale.value)
-  items.value = page.items
+  const result = await fetchChildren(parentId.value, apiLocale.value, page, PAGE_SIZE)
+  items.value = result.items
+  listPage.value = result.page
+  listTotal.value = result.total
 }
 
 async function openParent(id: number | null, label: string) {
   parentId.value = id
   parentLabel.value = label
   editing.value = null
-  await loadList()
+  await loadList(0)
 }
 
 async function startEdit(id: number) {
-  editing.value = await fetchTaxonDetail(id, apiLocale.value)
+  const detail = await fetchTaxonDetail(id, apiLocale.value)
+  if (detail.mediaTotal > detail.media.length) {
+    const all = await fetchTaxonMedia(id, 0, Math.min(Number(detail.mediaTotal), 100))
+    editing.value = { ...detail, media: all.items }
+  } else {
+    editing.value = detail
+  }
   form.rank = editing.value.rank
   form.scientificName = editing.value.scientificName
   form.commonName = editing.value.commonName || ''
@@ -97,6 +118,7 @@ async function onSubmit() {
         description: form.description,
       })
       message.value = t('admin.updated')
+      toast.push(t('admin.updated'), 'ok')
     } else {
       await createTaxon({
         parentId: parentId.value,
@@ -108,11 +130,13 @@ async function onSubmit() {
         description: form.description,
       })
       message.value = t('admin.created')
+      toast.push(t('admin.created'), 'ok')
       resetForm()
     }
-    await loadList()
+    await loadList(listPage.value)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
   }
 }
 
@@ -125,25 +149,54 @@ async function onMoveHere() {
   try {
     editing.value = await moveTaxon(editing.value.id, parentId.value, apiLocale.value)
     message.value = t('admin.moved')
-    await loadList()
+    toast.push(t('admin.moved'), 'ok')
+    await loadList(listPage.value)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
   }
 }
 
-async function onDelete(id: number) {
-  if (!window.confirm(t('admin.confirmDelete'))) {
+function askDeleteTaxon(id: number) {
+  confirmKind.value = 'taxon'
+  confirmTargetId.value = id
+  confirmOpen.value = true
+}
+
+function askDeleteMedia(mediaId: number) {
+  confirmKind.value = 'media'
+  confirmTargetId.value = mediaId
+  confirmOpen.value = true
+}
+
+async function onConfirmDelete() {
+  const id = confirmTargetId.value
+  confirmOpen.value = false
+  if (id == null) return
+  if (confirmKind.value === 'taxon') {
+    try {
+      await deleteTaxon(id)
+      message.value = t('admin.deleted')
+      toast.push(t('admin.deleted'), 'ok')
+      if (editing.value?.id === id) {
+        resetForm()
+      }
+      await loadList(listPage.value)
+    } catch (e) {
+      error.value = messageFromApiError(e)
+      toast.push(error.value, 'error')
+    }
     return
   }
+  if (!editing.value) return
   try {
-    await deleteTaxon(id)
-    message.value = t('admin.deleted')
-    if (editing.value?.id === id) {
-      resetForm()
-    }
-    await loadList()
+    await deleteTaxonMedia(editing.value.id, id)
+    editing.value = await fetchTaxonDetail(editing.value.id, apiLocale.value)
+    message.value = t('admin.mediaDeleted')
+    toast.push(t('admin.mediaDeleted'), 'ok')
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
   }
 }
 
@@ -162,37 +215,23 @@ async function onUpload(event: Event) {
     })
     editing.value = await fetchTaxonDetail(editing.value.id, apiLocale.value)
     message.value = t('admin.mediaUploaded')
+    toast.push(t('admin.mediaUploaded'), 'ok')
     mediaCaption.value = ''
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
+    error.value = messageFromApiError(e)
+    toast.push(error.value, 'error')
   } finally {
     uploading.value = false
     input.value = ''
   }
 }
 
-async function onDeleteMedia(mediaId: number) {
-  if (!editing.value) {
-    return
-  }
-  if (!window.confirm(t('admin.confirmDeleteMedia'))) {
-    return
-  }
-  try {
-    await deleteTaxonMedia(editing.value.id, mediaId)
-    editing.value = await fetchTaxonDetail(editing.value.id, apiLocale.value)
-    message.value = t('admin.mediaDeleted')
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'failed'
-  }
-}
-
 onMounted(async () => {
   resetForm()
-  await loadList()
+  await loadList(0)
 })
 
-watch(apiLocale, loadList)
+watch(apiLocale, () => loadList(listPage.value))
 </script>
 
 <template>
@@ -213,12 +252,15 @@ watch(apiLocale, loadList)
     <div class="grid">
       <div class="panel">
         <h2>{{ t('admin.children') }}</h2>
+        <p class="muted">
+          {{ t('admin.pageInfo', { page: listPage + 1, total: listTotal }) }}
+        </p>
         <ul>
           <li v-for="item in items" :key="item.id">
             <div class="item-main">
               <button type="button" class="linkish" @click="startEdit(item.id)">
                 <strong>{{ item.scientificName }}</strong>
-                <span>{{ item.commonName || item.rank }}</span>
+                <span>{{ item.commonName || rankLabel(item.rank) }}</span>
               </button>
             </div>
             <div class="item-actions">
@@ -228,11 +270,17 @@ watch(apiLocale, loadList)
               >
                 {{ t('admin.enter') }}
               </BtButton>
-              <BtButton variant="danger" @click="onDelete(item.id)">{{ t('admin.delete') }}</BtButton>
+              <BtButton variant="danger" @click="askDeleteTaxon(item.id)">{{ t('admin.delete') }}</BtButton>
             </div>
           </li>
         </ul>
         <p v-if="!items.length" class="muted">{{ t('admin.empty') }}</p>
+        <BtPagination
+          :page="listPage"
+          :size="PAGE_SIZE"
+          :total="listTotal"
+          @update:page="loadList"
+        />
       </div>
 
       <form class="panel form" @submit.prevent="onSubmit">
@@ -255,7 +303,7 @@ watch(apiLocale, loadList)
         </label>
         <label>
           <span>{{ t('admin.description') }}</span>
-          <textarea v-model="form.description" rows="5" />
+          <BtTextarea v-model="form.description" :rows="5" />
         </label>
         <div class="actions">
           <BtButton type="submit">{{ t('common.save') }}</BtButton>
@@ -278,7 +326,7 @@ watch(apiLocale, loadList)
               <img :src="m.url" :alt="m.caption || editing.scientificName" loading="lazy" />
               <figcaption>
                 <span>{{ m.caption || t('admin.mediaNoCaption') }}</span>
-                <BtButton type="button" variant="danger" @click="onDeleteMedia(m.id)">
+                <BtButton type="button" variant="danger" @click="askDeleteMedia(m.id)">
                   {{ t('admin.delete') }}
                 </BtButton>
               </figcaption>
@@ -301,6 +349,16 @@ watch(apiLocale, loadList)
         <p v-if="error" class="error">{{ error }}</p>
       </form>
     </div>
+
+    <BtDialog
+      :open="confirmOpen"
+      :title="t('admin.delete')"
+      :message="confirmKind === 'taxon' ? t('admin.confirmDelete') : t('admin.confirmDeleteMedia')"
+      :confirm-label="t('common.confirm')"
+      :cancel-label="t('common.cancel')"
+      @confirm="onConfirmDelete"
+      @cancel="confirmOpen = false"
+    />
   </section>
 </template>
 
@@ -384,16 +442,6 @@ label {
   gap: var(--space-2);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-
-textarea {
-  width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text);
-  padding: 0.55rem 0.7rem;
-  font: inherit;
 }
 
 .actions {

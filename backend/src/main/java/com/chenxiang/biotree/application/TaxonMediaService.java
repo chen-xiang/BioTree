@@ -49,7 +49,7 @@ public class TaxonMediaService {
             Long taxonId, MultipartFile file, String locale, String caption, String license, String attribution) {
         Taxon taxon = taxonRepository
                 .findById(taxonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Taxon not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TAXON_NOT_FOUND));
         validateFile(file);
 
         String contentType = file.getContentType();
@@ -101,9 +101,9 @@ public class TaxonMediaService {
     public void delete(Long taxonId, Long mediaId) {
         TaxonMedia media = taxonMediaRepository
                 .findById(mediaId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Media not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA_NOT_FOUND));
         if (!media.getTaxon().getId().equals(taxonId)) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Media not found for taxon");
+            throw new BusinessException(ErrorCode.MEDIA_NOT_FOUND);
         }
         storageService.delete(media.getStorageKey());
         taxonMediaRepository.delete(media);
@@ -112,14 +112,14 @@ public class TaxonMediaService {
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "File is required");
+            throw new BusinessException(ErrorCode.INVALID_UPLOAD);
         }
         if (file.getSize() > MediaConstants.MAX_BYTES) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "File exceeds 5MB limit");
+            throw new BusinessException(ErrorCode.INVALID_UPLOAD);
         }
         String contentType = file.getContentType();
         if (!StringUtils.hasText(contentType) || !MediaConstants.ALLOWED_CONTENT_TYPES.contains(contentType)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only jpeg/png/webp/gif images are allowed");
+            throw new BusinessException(ErrorCode.INVALID_UPLOAD);
         }
     }
 

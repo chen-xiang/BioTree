@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getStatsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/taxa/children": {
         parameters: {
             query?: never;
@@ -68,6 +84,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxa/{id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTaxonMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/import/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getImportStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/taxa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createTaxon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/taxa/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateTaxon"];
+        post?: never;
+        delete: operations["deleteTaxon"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/taxa/{id}/move": {
         parameters: {
             query?: never;
@@ -84,10 +212,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/taxa/{taxonId}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["uploadTaxonMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/taxa/{taxonId}/media/{mediaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteTaxonMedia"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        /** @enum {string} */
+        TaxonRank: "KINGDOM" | "PHYLUM" | "CLASS" | "ORDER" | "FAMILY" | "GENUS" | "SPECIES";
+        TaxonListItem: {
+            /** Format: int64 */
+            id: number;
+            rank: components["schemas"]["TaxonRank"];
+            scientificName: string;
+            commonName?: string | null;
+            childCount: number;
+            hasChildren: boolean;
+        };
+        TaxonBreadcrumb: {
+            /** Format: int64 */
+            id: number;
+            rank: components["schemas"]["TaxonRank"];
+            scientificName: string;
+            commonName?: string | null;
+        };
+        TaxonMedia: {
+            /** Format: int64 */
+            id: number;
+            url: string;
+            mimeType?: string | null;
+            width?: number | null;
+            height?: number | null;
+            sortOrder?: number;
+            locale?: string | null;
+            caption?: string | null;
+            license?: string | null;
+            attribution?: string | null;
+        };
+        TaxonSynonym: {
+            /** Format: int64 */
+            id: number;
+            scientificName: string;
+        };
+        TaxonDetail: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            parentId?: number | null;
+            rank: components["schemas"]["TaxonRank"];
+            scientificName: string;
+            commonName?: string | null;
+            summary?: string | null;
+            description?: string | null;
+            locale: string;
+            childCount: number;
+            accepted: boolean;
+            breadcrumbs: components["schemas"]["TaxonBreadcrumb"][];
+            media: components["schemas"]["TaxonMedia"][];
+            /** Format: int64 */
+            mediaTotal: number;
+            synonyms: components["schemas"]["TaxonSynonym"][];
+        };
+        PageTaxonListItem: {
+            items: components["schemas"]["TaxonListItem"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        PageTaxonMedia: {
+            items: components["schemas"]["TaxonMedia"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        StatsSummary: {
+            /** Format: int64 */
+            totalTaxa: number;
+            byRank: {
+                [key: string]: number;
+            };
+            byKingdom: {
+                [key: string]: number;
+            };
+        };
+        CreateTaxonRequest: {
+            /** Format: int64 */
+            parentId?: number | null;
+            rank: components["schemas"]["TaxonRank"];
+            scientificName: string;
+            locale?: string;
+            commonName?: string;
+            summary?: string;
+            description?: string;
+        };
+        UpdateTaxonRequest: {
+            scientificName: string;
+            accepted?: boolean;
+            locale?: string;
+            commonName?: string;
+            summary?: string;
+            description?: string;
+        };
+        ApiResponseHealth: {
+            code?: number;
+            message?: string;
+            data?: {
+                status?: string;
+            };
+        };
+        ApiResponseStatsSummary: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["StatsSummary"];
+        };
+        ApiResponsePageTaxonListItem: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["PageTaxonListItem"];
+        };
+        ApiResponsePageTaxonMedia: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["PageTaxonMedia"];
+        };
+        ApiResponseTaxonDetail: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["TaxonDetail"];
+        };
+        ApiResponseTaxonMedia: {
+            code?: number;
+            message?: string;
+            data?: components["schemas"]["TaxonMedia"];
+        };
+        ApiResponseUsername: {
+            code?: number;
+            message?: string;
+            data?: {
+                username?: string;
+            };
+        };
+        ApiResponseVoid: {
+            code?: number;
+            message?: string;
+            data?: unknown;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -110,7 +412,29 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiResponseHealth"];
+                };
+            };
+        };
+    };
+    getStatsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseStatsSummary"];
+                };
             };
         };
     };
@@ -133,7 +457,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiResponsePageTaxonListItem"];
+                };
             };
         };
     };
@@ -142,6 +468,8 @@ export interface operations {
             query: {
                 q: string;
                 locale?: string;
+                page?: number;
+                size?: number;
             };
             header?: never;
             path?: never;
@@ -154,7 +482,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiResponsePageTaxonListItem"];
+                };
             };
         };
     };
@@ -176,13 +506,199 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonDetail"];
+                };
+            };
+        };
+    };
+    listTaxonMedia: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponsePageTaxonMedia"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseUsername"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseUsername"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    getImportStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
                 content?: never;
+            };
+        };
+    };
+    createTaxon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonDetail"];
+                };
+            };
+        };
+    };
+    updateTaxon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaxonRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonDetail"];
+                };
+            };
+        };
+    };
+    deleteTaxon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseVoid"];
+                };
             };
         };
     };
     moveTaxon: {
         parameters: {
-            query?: never;
+            query?: {
+                locale?: string;
+            };
             header?: never;
             path: {
                 id: number;
@@ -203,7 +719,65 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonDetail"];
+                };
+            };
+        };
+    };
+    uploadTaxonMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxonId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    locale?: string;
+                    caption?: string;
+                    license?: string;
+                    attribution?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseTaxonMedia"];
+                };
+            };
+        };
+    };
+    deleteTaxonMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxonId: number;
+                mediaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseVoid"];
+                };
             };
         };
     };
