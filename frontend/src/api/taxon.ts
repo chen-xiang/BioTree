@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加配图上传与删除接口
+ * Updated: 2026-08-31 支持 AbortSignal、节点移动
  */
 import type { ApiResponse } from './client'
 
@@ -99,6 +100,7 @@ export async function fetchChildren(
   locale: string,
   page = 0,
   size = 30,
+  signal?: AbortSignal,
 ): Promise<PageResult<TaxonListItem>> {
   const params = new URLSearchParams({
     locale,
@@ -108,13 +110,17 @@ export async function fetchChildren(
   if (parentId != null) {
     params.set('parentId', String(parentId))
   }
-  const response = await fetch(`/api/taxa/children?${params}`, { credentials: 'include' })
+  const response = await fetch(`/api/taxa/children?${params}`, { credentials: 'include', signal })
   return (await parseJson<PageResult<TaxonListItem>>(response)).data
 }
 
-export async function fetchTaxonDetail(id: number, locale: string): Promise<TaxonDetail> {
+export async function fetchTaxonDetail(
+  id: number,
+  locale: string,
+  signal?: AbortSignal,
+): Promise<TaxonDetail> {
   const params = new URLSearchParams({ locale })
-  const response = await fetch(`/api/taxa/${id}?${params}`, { credentials: 'include' })
+  const response = await fetch(`/api/taxa/${id}?${params}`, { credentials: 'include', signal })
   return (await parseJson<TaxonDetail>(response)).data
 }
 
@@ -123,6 +129,7 @@ export async function searchTaxa(
   locale: string,
   page = 0,
   size = 30,
+  signal?: AbortSignal,
 ): Promise<PageResult<TaxonListItem>> {
   const params = new URLSearchParams({
     q,
@@ -130,7 +137,7 @@ export async function searchTaxa(
     page: String(page),
     size: String(size),
   })
-  const response = await fetch(`/api/taxa/search?${params}`, { credentials: 'include' })
+  const response = await fetch(`/api/taxa/search?${params}`, { credentials: 'include', signal })
   return (await parseJson<PageResult<TaxonListItem>>(response)).data
 }
 
@@ -150,6 +157,19 @@ export async function updateTaxon(id: number, payload: UpdateTaxonPayload): Prom
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+  return (await parseJson<TaxonDetail>(response)).data
+}
+
+export async function moveTaxon(id: number, newParentId: number, locale?: string): Promise<TaxonDetail> {
+  const params = new URLSearchParams()
+  if (locale) params.set('locale', locale)
+  const qs = params.toString()
+  const response = await fetch(`/api/admin/taxa/${id}/move${qs ? `?${qs}` : ''}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newParentId }),
   })
   return (await parseJson<TaxonDetail>(response)).data
 }

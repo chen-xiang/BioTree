@@ -1,14 +1,14 @@
 /**
- * HTTP 客户端骨架：credentials 携带 Session Cookie。
- * 后端 OpenAPI 就绪后，用 openapi-typescript 生成类型并替换 paths。
+ * HTTP 客户端：credentials 携带 Session Cookie；类型来自 schema.d.ts。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 接入 OpenAPI paths 类型
  */
 import createClient from 'openapi-fetch'
+import type { paths } from './schema'
 
-/** 占位 Paths，待 `pnpm openapi:generate` 后替换为生成类型。 */
-export type paths = Record<string, never>
+export type { paths }
 
 export const apiClient = createClient<paths>({
   baseUrl: '/',

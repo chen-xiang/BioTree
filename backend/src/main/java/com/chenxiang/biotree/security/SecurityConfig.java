@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 调整规则顺序，确保 /api/admin/** 需登录
  * Updated: 2026-08-31 放行本地配图静态路径 /files/**
+ * Updated: 2026-08-31 Session 固定攻击防护与登出清理
  */
 package com.chenxiang.biotree.security;
 
@@ -30,9 +31,12 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
+        // 前后端同站 + SameSite=Lax Cookie；CSRF 在同站 SPA 下可后续以 Cookie token 方式开启
         http.csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .sessionFixation(fixation -> fixation.migrateSession()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/api/health").permitAll()
                         .requestMatchers("/files/**").permitAll()
@@ -50,6 +54,8 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .logout(logout -> logout
                         .logoutUrl("/api/admin/auth/logout")
+                        .invalidateHttpSession(true)
+                        .deleteCookies("BIOTREESESSION")
                         .logoutSuccessHandler((request, response, authentication) -> {
                             response.setStatus(HttpServletResponse.SC_OK);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);

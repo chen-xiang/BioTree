@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /**
- * 分类浏览页：搜索 + 懒加载树 + 详情。
+ * 分类浏览页：搜索 + 懒加载树 + 详情（可分享路由）。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 详情区展示配图画廊
+ * Updated: 2026-08-31 搜索防抖、AbortController、/browse/:id、分页
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
   fetchChildren,
   fetchTaxonDetail,
@@ -18,10 +19,19 @@ import {
 } from '@/api/taxon'
 import TaxonTreeNode from '@/components/taxon/TaxonTreeNode.vue'
 import BtButton from '@/components/ui/BtButton.vue'
+import BtInput from '@/components/ui/BtInput.vue'
+import BtPagination from '@/components/ui/BtPagination.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { debounce } from '@/utils/debounce'
+
+const props = defineProps<{
+  id?: string
+}>()
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
+const route = useRoute()
+const router = useRouter()
 
 const roots = ref<TaxonListItem[]>([])
 const selectedId = ref<number | null>(null)
@@ -30,10 +40,16 @@ const loadingRoots = ref(false)
 const loadingDetail = ref(false)
 const query = ref('')
 const searchHits = ref<TaxonListItem[]>([])
+const searchPage = ref(0)
+const searchTotal = ref(0)
 const searching = ref(false)
 const error = ref('')
 
 const apiLocale = computed(() => localeStore.locale)
+const SEARCH_SIZE = 20
+
+let detailAbort: AbortController | null = null
+let searchAbort: AbortController | null = null
 
 async function loadRoots() {
   loadingRoots.value = true
@@ -48,44 +64,96 @@ async function loadRoots() {
   }
 }
 
-async function loadDetail(id: number) {
+async function loadDetail(id: number, syncRoute = true) {
   selectedId.value = id
+  if (syncRoute && String(route.params.id ?? '') !== String(id)) {
+    await router.replace({ name: 'browse', params: { id: String(id) } })
+  }
+  detailAbort?.abort()
+  detailAbort = new AbortController()
   loadingDetail.value = true
   try {
-    detail.value = await fetchTaxonDetail(id, apiLocale.value)
+    detail.value = await fetchTaxonDetail(id, apiLocale.value, detailAbort.signal)
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return
     error.value = e instanceof Error ? e.message : 'failed'
   } finally {
     loadingDetail.value = false
   }
 }
 
-async function onSearch() {
-  if (query.value.trim().length < 2) {
+async function runSearch(page = 0) {
+  const q = query.value.trim()
+  if (q.length < 2) {
     searchHits.value = []
+    searchTotal.value = 0
+    searchPage.value = 0
     return
   }
+  searchAbort?.abort()
+  searchAbort = new AbortController()
   searching.value = true
   try {
-    const page = await searchTaxa(query.value.trim(), apiLocale.value)
-    searchHits.value = page.items
+    const result = await searchTaxa(q, apiLocale.value, page, SEARCH_SIZE, searchAbort.signal)
+    searchHits.value = result.items
+    searchTotal.value = result.total
+    searchPage.value = result.page
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return
     error.value = e instanceof Error ? e.message : 'failed'
   } finally {
     searching.value = false
   }
 }
 
-onMounted(loadRoots)
+const debouncedSearch = debounce(() => {
+  void runSearch(0)
+}, 320)
+
+function onSearchSubmit() {
+  void runSearch(0)
+}
+
+onMounted(async () => {
+  await loadRoots()
+  const routeId = props.id ? Number(props.id) : NaN
+  if (Number.isFinite(routeId)) {
+    await loadDetail(routeId, false)
+  }
+})
+
+watch(
+  () => props.id,
+  async (value) => {
+    if (!value) {
+      selectedId.value = null
+      detail.value = null
+      return
+    }
+    const id = Number(value)
+    if (Number.isFinite(id) && id !== selectedId.value) {
+      await loadDetail(id, false)
+    }
+  },
+)
 
 watch(apiLocale, async () => {
   await loadRoots()
   if (selectedId.value != null) {
-    await loadDetail(selectedId.value)
+    await loadDetail(selectedId.value, false)
   }
   if (query.value.trim().length >= 2) {
-    await onSearch()
+    await runSearch(searchPage.value)
   }
+})
+
+watch(query, () => {
+  debouncedSearch()
+})
+
+onBeforeUnmount(() => {
+  detailAbort?.abort()
+  searchAbort?.abort()
 })
 </script>
 
@@ -96,16 +164,17 @@ watch(apiLocale, async () => {
         <h1>{{ t('browse.title') }}</h1>
         <p>{{ t('browse.subtitle') }}</p>
       </div>
-      <form class="search" @submit.prevent="onSearch">
-        <input v-model="query" :placeholder="t('browse.searchPlaceholder')" />
+      <form class="search" @submit.prevent="onSearchSubmit">
+        <BtInput v-model="query" :placeholder="t('browse.searchPlaceholder')" />
         <BtButton type="submit">{{ t('browse.search') }}</BtButton>
       </form>
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <div v-if="searchHits.length" class="hits">
+    <div v-if="searchHits.length || searching" class="hits">
       <h2>{{ t('browse.searchResults') }}</h2>
+      <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
       <button
         v-for="hit in searchHits"
         :key="hit.id"
@@ -116,6 +185,12 @@ watch(apiLocale, async () => {
         <strong>{{ hit.scientificName }}</strong>
         <span>{{ hit.commonName || hit.rank }}</span>
       </button>
+      <BtPagination
+        :page="searchPage"
+        :size="SEARCH_SIZE"
+        :total="searchTotal"
+        @update:page="runSearch"
+      />
     </div>
 
     <div class="split">
@@ -140,8 +215,7 @@ watch(apiLocale, async () => {
             <RouterLink
               v-for="crumb in detail.breadcrumbs"
               :key="crumb.id"
-              :to="`/browse?id=${crumb.id}`"
-              @click.prevent="loadDetail(crumb.id)"
+              :to="{ name: 'browse', params: { id: String(crumb.id) } }"
             >
               {{ crumb.commonName || crumb.scientificName }}
             </RouterLink>
@@ -193,16 +267,11 @@ h1 {
 .search {
   display: flex;
   gap: var(--space-2);
+  align-items: center;
 }
 
-.search input {
+.search :deep(.bt-input) {
   min-width: min(20rem, 70vw);
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
 }
 
 .split {
@@ -218,6 +287,11 @@ h1 {
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
   min-height: 22rem;
+}
+
+.tree {
+  max-height: min(70vh, 40rem);
+  overflow: auto;
 }
 
 .tree h2,

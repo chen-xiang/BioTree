@@ -27,6 +27,8 @@ curl -L -o data/import/col_latest_dwca.zip \
 | 俗名 | 读取 `VernacularName.tsv`：`eng→en`，`zho/zh/chi→zh-CN` |
 | 外部 ID | 写入 `taxon.external_source=col` + `taxon.external_id` |
 | replace | `true` 时清空既有 `taxon` / `taxon_i18n` / `taxon_media`（管理员账号保留） |
+| 写入路径 | 按等级排序后 **JDBC 批量 INSERT**（默认 500/批）+ 批量回写 `materialized_path`；俗名批量 upsert |
+| child_count | 导入结束按 `parent_id` 分组批量回写 |
 
 ## 3. 运行导入
 

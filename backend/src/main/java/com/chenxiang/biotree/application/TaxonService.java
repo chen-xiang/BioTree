@@ -1,8 +1,9 @@
 /**
- * 分类单元应用服务：查询、创建、更新、删除与路径维护。
+ * 分类单元应用服务：查询、创建、更新、移动、删除与路径维护。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 locale 回退、前缀优先搜索、节点移动
  */
 package com.chenxiang.biotree.application;
 
@@ -63,12 +64,16 @@ public class TaxonService {
 
     @Transactional(readOnly = true)
     public PageResult<TaxonListItemDto> listChildren(Long parentId, String locale, int page, int size) {
-        String resolvedLocale = resolveLocale(locale);
+        String resolvedLocale = LocaleSupport.normalize(locale);
         PageRequest pageable = pageRequest(page, size);
         Page<Taxon> taxa = parentId == null
                 ? taxonRepository.findByParentIsNull(pageable)
                 : taxonRepository.findByParentId(parentId, pageable);
-        return PageResult.of(toListItems(taxa.getContent(), resolvedLocale), taxa.getTotalElements(), taxa.getNumber(), taxa.getSize());
+        return PageResult.of(
+                toListItems(taxa.getContent(), resolvedLocale),
+                taxa.getTotalElements(),
+                taxa.getNumber(),
+                taxa.getSize());
     }
 
     @Transactional(readOnly = true)
@@ -76,18 +81,27 @@ public class TaxonService {
         if (!StringUtils.hasText(q) || q.trim().length() < 2) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Query must be at least 2 characters");
         }
-        String resolvedLocale = resolveLocale(locale);
+        String resolvedLocale = LocaleSupport.normalize(locale);
+        List<String> locales = LocaleSupport.fallbackChain(resolvedLocale);
         PageRequest pageable = pageRequest(page, size);
-        Page<Taxon> taxa = taxonRepository.search(q.trim(), resolvedLocale, pageable);
-        return PageResult.of(toListItems(taxa.getContent(), resolvedLocale), taxa.getTotalElements(), taxa.getNumber(), taxa.getSize());
+        String term = q.trim();
+        Page<Taxon> taxa = taxonRepository.searchPrefix(term, locales, pageable);
+        if (taxa.getTotalElements() == 0) {
+            taxa = taxonRepository.searchContains(term, locales, pageable);
+        }
+        return PageResult.of(
+                toListItems(taxa.getContent(), resolvedLocale),
+                taxa.getTotalElements(),
+                taxa.getNumber(),
+                taxa.getSize());
     }
 
     @Transactional(readOnly = true)
     public TaxonDetailDto getDetail(Long id, String locale) {
-        String resolvedLocale = resolveLocale(locale);
+        String preferredLocale = LocaleSupport.normalize(locale);
         Taxon taxon = requireTaxon(id);
-        TaxonI18n i18n = taxonI18nRepository.findByTaxonIdAndLocale(id, resolvedLocale).orElse(null);
-        List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, resolvedLocale);
+        MergedI18n i18n = mergeI18n(id, preferredLocale);
+        List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, preferredLocale);
         List<TaxonMediaDto> media = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(id).stream()
                 .map(this::toMediaDto)
                 .toList();
@@ -96,10 +110,10 @@ public class TaxonService {
                 taxon.getParent() == null ? null : taxon.getParent().getId(),
                 taxon.getRank(),
                 taxon.getScientificName(),
-                i18n == null ? null : i18n.getCommonName(),
-                i18n == null ? null : i18n.getSummary(),
-                i18n == null ? null : i18n.getDescription(),
-                resolvedLocale,
+                i18n.commonName(),
+                i18n.summary(),
+                i18n.description(),
+                i18n.contentLocale() == null ? preferredLocale : i18n.contentLocale(),
                 taxon.getChildCount(),
                 taxon.isAccepted(),
                 breadcrumbs,
@@ -145,7 +159,7 @@ public class TaxonService {
 
         upsertI18n(taxon, request.locale(), request.commonName(), request.summary(), request.description());
         log.info("Created taxon id={} rank={} name={}", taxon.getId(), taxon.getRank(), taxon.getScientificName());
-        return getDetail(taxon.getId(), resolveLocale(request.locale()));
+        return getDetail(taxon.getId(), LocaleSupport.normalize(request.locale()));
     }
 
     @Transactional
@@ -164,7 +178,70 @@ public class TaxonService {
         taxonRepository.save(taxon);
         upsertI18n(taxon, request.locale(), request.commonName(), request.summary(), request.description());
         log.info("Updated taxon id={}", id);
-        return getDetail(id, resolveLocale(request.locale()));
+        return getDetail(id, LocaleSupport.normalize(request.locale()));
+    }
+
+    /**
+     * 将节点移动到新父节点，并批量更新自身与子孙的 materialized_path。
+     */
+    @Transactional
+    public TaxonDetailDto move(Long id, Long newParentId, String locale) {
+        Taxon taxon = requireTaxon(id);
+        if (taxon.getRank() == TaxonRank.KINGDOM) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Kingdom cannot be moved under a parent");
+        }
+        if (newParentId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "newParentId is required for non-kingdom taxa");
+        }
+        if (newParentId.equals(id)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot move taxon under itself");
+        }
+
+        Taxon newParent = requireTaxon(newParentId);
+        if (!TaxonRankRules.isValidParent(taxon.getRank(), newParent.getRank())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid parent/child rank combination");
+        }
+
+        String oldPath = taxon.getMaterializedPath();
+        if (newParent.getMaterializedPath().startsWith(oldPath)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot move taxon under its descendant");
+        }
+
+        Taxon oldParent = taxon.getParent();
+        Long oldParentId = oldParent == null ? null : oldParent.getId();
+        if (newParentId.equals(oldParentId)) {
+            return getDetail(id, locale);
+        }
+
+        assertUniqueName(newParentId, taxon.getScientificName());
+
+        String newPath = newParent.getMaterializedPath() + taxon.getId() + "/";
+        List<Taxon> subtree = taxonRepository.findByMaterializedPathStartingWith(oldPath);
+        Instant now = Instant.now();
+        for (Taxon node : subtree) {
+            String path = node.getMaterializedPath();
+            if (!path.startsWith(oldPath)) {
+                continue;
+            }
+            node.setMaterializedPath(newPath + path.substring(oldPath.length()));
+            node.setUpdatedAt(now);
+            if (node.getId().equals(taxon.getId())) {
+                node.setParent(newParent);
+            }
+        }
+        taxonRepository.saveAll(subtree);
+
+        if (oldParent != null) {
+            oldParent.setChildCount(Math.max(0, oldParent.getChildCount() - 1));
+            oldParent.setUpdatedAt(now);
+            taxonRepository.save(oldParent);
+        }
+        newParent.setChildCount(newParent.getChildCount() + 1);
+        newParent.setUpdatedAt(now);
+        taxonRepository.save(newParent);
+
+        log.info("Moved taxon id={} to parentId={}", id, newParentId);
+        return getDetail(id, LocaleSupport.normalize(locale));
     }
 
     @Transactional
@@ -194,7 +271,7 @@ public class TaxonService {
         if (!StringUtils.hasText(commonName) && !StringUtils.hasText(summary) && !StringUtils.hasText(description)) {
             return;
         }
-        String resolvedLocale = resolveLocale(locale);
+        String resolvedLocale = LocaleSupport.normalize(locale);
         TaxonI18n i18n = taxonI18nRepository
                 .findByTaxonIdAndLocale(taxon.getId(), resolvedLocale)
                 .orElseGet(TaxonI18n::new);
@@ -216,7 +293,8 @@ public class TaxonService {
         if (taxa.isEmpty()) {
             return List.of();
         }
-        Map<Long, String> commonNames = loadCommonNames(taxa.stream().map(Taxon::getId).toList(), locale);
+        Map<Long, String> commonNames = loadCommonNames(
+                taxa.stream().map(Taxon::getId).toList(), locale);
         return taxa.stream()
                 .map(t -> new TaxonListItemDto(
                         t.getId(),
@@ -233,10 +311,68 @@ public class TaxonService {
         if (ids.isEmpty()) {
             return map;
         }
-        for (TaxonI18n i18n : taxonI18nRepository.findByTaxonIdInAndLocale(ids, locale)) {
-            map.put(i18n.getTaxon().getId(), i18n.getCommonName());
+        List<String> chain = LocaleSupport.fallbackChain(locale);
+        List<TaxonI18n> rows = taxonI18nRepository.findByTaxonIdInAndLocaleIn(ids, chain);
+        Map<Long, Map<String, String>> byTaxon = new HashMap<>();
+        for (TaxonI18n i18n : rows) {
+            if (!StringUtils.hasText(i18n.getCommonName())) {
+                continue;
+            }
+            byTaxon
+                    .computeIfAbsent(i18n.getTaxon().getId(), k -> new HashMap<>())
+                    .put(i18n.getLocale(), i18n.getCommonName());
+        }
+        for (Long id : ids) {
+            Map<String, String> locales = byTaxon.get(id);
+            if (locales == null) {
+                continue;
+            }
+            for (String loc : chain) {
+                String name = locales.get(loc);
+                if (StringUtils.hasText(name)) {
+                    map.put(id, name);
+                    break;
+                }
+            }
         }
         return map;
+    }
+
+    private MergedI18n mergeI18n(Long taxonId, String preferredLocale) {
+        List<String> chain = LocaleSupport.fallbackChain(preferredLocale);
+        List<TaxonI18n> rows = taxonI18nRepository.findByTaxonIdAndLocaleIn(taxonId, chain);
+        Map<String, TaxonI18n> byLocale = rows.stream()
+                .collect(Collectors.toMap(TaxonI18n::getLocale, r -> r, (a, b) -> a));
+
+        String commonName = null;
+        String summary = null;
+        String description = null;
+        String contentLocale = null;
+        for (String loc : chain) {
+            TaxonI18n row = byLocale.get(loc);
+            if (row == null) {
+                continue;
+            }
+            if (commonName == null && StringUtils.hasText(row.getCommonName())) {
+                commonName = row.getCommonName();
+                if (contentLocale == null) {
+                    contentLocale = loc;
+                }
+            }
+            if (summary == null && StringUtils.hasText(row.getSummary())) {
+                summary = row.getSummary();
+                if (contentLocale == null) {
+                    contentLocale = loc;
+                }
+            }
+            if (description == null && StringUtils.hasText(row.getDescription())) {
+                description = row.getDescription();
+                if (contentLocale == null) {
+                    contentLocale = loc;
+                }
+            }
+        }
+        return new MergedI18n(commonName, summary, description, contentLocale);
     }
 
     private List<TaxonBreadcrumbDto> buildBreadcrumbs(Taxon taxon, String locale) {
@@ -254,7 +390,8 @@ public class TaxonService {
         for (Long id : ids) {
             Taxon node = byId.get(id);
             if (node != null) {
-                result.add(new TaxonBreadcrumbDto(node.getId(), node.getRank(), node.getScientificName(), names.get(id)));
+                result.add(new TaxonBreadcrumbDto(
+                        node.getId(), node.getRank(), node.getScientificName(), names.get(id)));
             }
         }
         return result;
@@ -288,13 +425,12 @@ public class TaxonService {
         }
     }
 
-    private static String resolveLocale(String locale) {
-        return StringUtils.hasText(locale) ? locale : AppConstants.DEFAULT_LOCALE;
-    }
-
     private static PageRequest pageRequest(int page, int size) {
         int safePage = Math.max(page, AppConstants.DEFAULT_PAGE);
         int safeSize = size <= 0 ? AppConstants.DEFAULT_PAGE_SIZE : Math.min(size, AppConstants.MAX_PAGE_SIZE);
         return PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "scientificName"));
+    }
+
+    private record MergedI18n(String commonName, String summary, String description, String contentLocale) {
     }
 }
