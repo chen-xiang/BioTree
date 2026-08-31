@@ -45,6 +45,9 @@ export default {
     viewToggle: '阶元视图',
     viewSimple: '简易七级',
     viewFull: '完整阶元',
+    otherVernaculars: '其它语言俗名',
+    distributions: '分布',
+    publishedIn: '发表文献',
   },
   theme: {
     light: '浅色',
@@ -104,6 +107,7 @@ export default {
     importStatus: '导入状态',
     importPhase: '阶段',
     importProgress: '已处理 {n} / 提示总量 {total}',
+    datasetSource: '数据来源',
   },
   login: {
     title: '管理员登录',

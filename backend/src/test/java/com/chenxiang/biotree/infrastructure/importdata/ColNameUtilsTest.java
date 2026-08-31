@@ -33,6 +33,13 @@ class ColNameUtilsTest {
     }
 
     @Test
+    void canonicalSubspeciesIncludesInfraspecificEpithet() {
+        String name = ColNameUtils.canonicalName(
+                TaxonRank.SUBSPECIES, "Homo sapiens sapiens", "Homo", "sapiens", "sapiens");
+        assertEquals("Homo sapiens sapiens", name);
+    }
+
+    @Test
     void stripAuthorshipForHigherRanks() {
         assertEquals("Chordata", ColNameUtils.stripAuthorship("Chordata Bateson, 1885"));
     }

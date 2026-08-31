@@ -45,6 +45,9 @@ export default {
     viewToggle: 'Rank view',
     viewSimple: 'Simple (7 ranks)',
     viewFull: 'Full ranks',
+    otherVernaculars: 'Other vernacular names',
+    distributions: 'Distribution',
+    publishedIn: 'Published in',
   },
   theme: {
     light: 'Light',
@@ -104,6 +107,7 @@ export default {
     importStatus: 'Import status',
     importPhase: 'Phase',
     importProgress: 'Processed {n} / hint total {total}',
+    datasetSource: 'Data source',
   },
   login: {
     title: 'Admin sign in',

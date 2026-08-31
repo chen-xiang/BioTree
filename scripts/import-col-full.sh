@@ -3,6 +3,7 @@
 # BioTree - Catalogue of Life 全量导入（动物界 + 植物界）
 # Author: chen-xiang
 # Created: 2026-08-31
+# Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
 # 用法：./scripts/import-col-full.sh
 # 前置：JDK 21、MySQL（库 biotree）、网络（若需下载数据包）
 # =============================================================================
@@ -48,7 +49,8 @@ else
 fi
 
 echo
-echo "[WARN] This will REPLACE existing taxon / taxon_i18n / taxon_media data."
+echo "[WARN] This will REPLACE existing taxon / i18n / media / distribution data."
+echo "       Imports full ranks + vernaculars/synonyms/descriptions/distributions/media."
 echo "       Full import may take a long time and use significant disk/CPU."
 echo
 read -r -p "Type YES to continue: " CONFIRM
@@ -60,8 +62,8 @@ fi
 cd "$BACKEND"
 chmod +x ./gradlew 2>/dev/null || true
 echo
-echo "[INFO] Starting import (max-per-rank=0, replace=true)..."
-./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=true --app.import.max-per-rank=0 --app.import.import-vernaculars=true"
+echo "[INFO] Starting import (rank-mode=full, max-per-rank=0, replace=true)..."
+./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=true --app.import.resume=false --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"
 EXITCODE=$?
 
 echo
