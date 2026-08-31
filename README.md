@@ -10,6 +10,7 @@
 - 性能设计：[docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - 真实数据导入：[docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)
 - 改进优化实施方案：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)
+- 完整阶元与 DwC 补齐方案：[docs/FULL_TAXONOMY_PLAN.md](docs/FULL_TAXONOMY_PLAN.md)
 - Windows / Linux 脚本：见下方「脚本」；全量导入 `scripts/import-col-full.{bat,sh}`
 
 ## 工程结构
