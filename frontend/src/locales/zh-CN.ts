@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 补充浏览与管理分类文案
  * Updated: 2026-08-31 补充配图管理文案
+ * Updated: 2026-08-31 补充加载更多与节点移动文案
  */
 export default {
   common: {
@@ -34,6 +35,7 @@ export default {
     searchResults: '搜索结果',
     selectHint: '从左侧选择一个分类单元查看详情。',
     childrenCount: '{n} 个子节点',
+    loadMore: '加载更多',
   },
   theme: {
     light: '浅色',
@@ -73,6 +75,9 @@ export default {
     mediaUploaded: '配图已上传',
     mediaDeleted: '配图已删除',
     confirmDeleteMedia: '确认删除该配图？',
+    move: '移动到当前父节点',
+    moved: '已移动',
+    moveHint: '将节点移动到当前正在浏览的父节点下（等级须合法）。',
   },
   login: {
     title: '管理员登录',

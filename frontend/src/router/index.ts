@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加浏览页与管理分类 CRUD 路由
+ * Updated: 2026-08-31 可分享详情路由 /browse/:id
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -21,9 +22,10 @@ const router = createRouter({
           component: () => import('@/views/HomeView.vue'),
         },
         {
-          path: 'browse',
+          path: 'browse/:id?',
           name: 'browse',
           component: () => import('@/views/BrowseView.vue'),
+          props: true,
         },
         {
           path: 'login',

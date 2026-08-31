@@ -1,13 +1,16 @@
-<script setup lang="ts">
 /**
- * 懒加载分类树节点行。
+ * 懒加载分类树节点行（支持子节点分页加载更多）。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 子节点分页与加载更多
  */
-import { ref, watch } from 'vue'
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TaxonListItem } from '@/api/taxon'
 import { fetchChildren } from '@/api/taxon'
+import BtButton from '@/components/ui/BtButton.vue'
 
 const props = defineProps<{
   node: TaxonListItem
@@ -20,10 +23,26 @@ const emit = defineEmits<{
   select: [id: number]
 }>()
 
+const { t } = useI18n()
+const PAGE_SIZE = 40
+
 const expanded = ref(false)
 const loading = ref(false)
+const loadingMore = ref(false)
 const children = ref<TaxonListItem[]>([])
+const page = ref(0)
+const total = ref(0)
 const loaded = ref(false)
+
+const hasMore = computed(() => children.value.length < total.value)
+
+async function loadPage(nextPage: number, append: boolean) {
+  const result = await fetchChildren(props.node.id, props.locale, nextPage, PAGE_SIZE)
+  total.value = result.total
+  page.value = result.page
+  children.value = append ? [...children.value, ...result.items] : result.items
+  loaded.value = true
+}
 
 async function toggle() {
   if (!props.node.hasChildren) {
@@ -34,9 +53,7 @@ async function toggle() {
   if (expanded.value && !loaded.value) {
     loading.value = true
     try {
-      const page = await fetchChildren(props.node.id, props.locale)
-      children.value = page.items
-      loaded.value = true
+      await loadPage(0, false)
     } finally {
       loading.value = false
     }
@@ -44,11 +61,23 @@ async function toggle() {
   emit('select', props.node.id)
 }
 
+async function loadMore() {
+  if (!hasMore.value || loadingMore.value) return
+  loadingMore.value = true
+  try {
+    await loadPage(page.value + 1, true)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
 watch(
   () => props.locale,
   () => {
     loaded.value = false
     children.value = []
+    page.value = 0
+    total.value = 0
     if (expanded.value) {
       expanded.value = false
     }
@@ -73,7 +102,7 @@ watch(
       <span class="rank">{{ node.rank }}</span>
     </button>
     <p v-if="loading" class="hint">…</p>
-    <div v-if="expanded && children.length" class="kids">
+    <div v-if="expanded" class="kids">
       <TaxonTreeNode
         v-for="child in children"
         :key="child.id"
@@ -83,6 +112,11 @@ watch(
         :selected-id="selectedId"
         @select="emit('select', $event)"
       />
+      <div v-if="hasMore" class="more" :style="{ paddingLeft: `${1.2 + depth * 0.9}rem` }">
+        <BtButton variant="ghost" :disabled="loadingMore" @click="loadMore">
+          {{ loadingMore ? t('common.loading') : t('browse.loadMore') }}
+        </BtButton>
+      </div>
     </div>
   </div>
 </template>
@@ -153,5 +187,9 @@ watch(
   padding-left: 2rem;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+.more {
+  margin-top: var(--space-1);
 }
 </style>

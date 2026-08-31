@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 Add browse and admin taxon copy
  * Updated: 2026-08-31 Add media management copy
+ * Updated: 2026-08-31 Add load-more and move copy
  */
 export default {
   common: {
@@ -34,6 +35,7 @@ export default {
     searchResults: 'Search results',
     selectHint: 'Select a taxon on the left to view details.',
     childrenCount: '{n} children',
+    loadMore: 'Load more',
   },
   theme: {
     light: 'Light',
@@ -73,6 +75,9 @@ export default {
     mediaUploaded: 'Media uploaded',
     mediaDeleted: 'Media deleted',
     confirmDeleteMedia: 'Delete this image?',
+    move: 'Move under current parent',
+    moved: 'Moved',
+    moveHint: 'Move this taxon under the parent you are currently browsing (rank must be valid).',
   },
   login: {
     title: 'Admin sign in',

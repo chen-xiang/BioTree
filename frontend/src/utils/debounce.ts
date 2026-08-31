@@ -1,0 +1,16 @@
+/**
+ * 简易防抖工具。
+ *
+ * Author: chen-xiang
+ * Created: 2026-08-31
+ */
+export function debounce<T extends (...args: never[]) => void>(
+  fn: T,
+  waitMs: number,
+): (...args: Parameters<T>) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return (...args: Parameters<T>) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), waitMs)
+  }
+}

@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加根节点分页与学名/俗名搜索
+ * Updated: 2026-08-31 前缀优先搜索、多 locale、路径子树查询
  */
 package com.chenxiang.biotree.infrastructure.persistence;
 
@@ -26,16 +27,35 @@ public interface TaxonRepository extends JpaRepository<Taxon, Long> {
 
     List<Taxon> findByIdIn(Collection<Long> ids);
 
+    List<Taxon> findByMaterializedPathStartingWith(String pathPrefix);
+
     boolean existsByParentIdAndScientificNameIgnoreCase(Long parentId, String scientificName);
 
     boolean existsByParentIsNullAndScientificNameIgnoreCase(String scientificName);
 
+    /**
+     * 前缀匹配（可走 scientific_name / locale+common_name 索引前缀扫描）。
+     */
     @Query(
             """
             SELECT DISTINCT t FROM Taxon t
-            LEFT JOIN TaxonI18n i ON i.taxon = t AND i.locale = :locale
+            LEFT JOIN TaxonI18n i ON i.taxon = t AND i.locale IN :locales
+            WHERE LOWER(t.scientificName) LIKE LOWER(CONCAT(:q, '%'))
+               OR LOWER(COALESCE(i.commonName, '')) LIKE LOWER(CONCAT(:q, '%'))
+            """)
+    Page<Taxon> searchPrefix(
+            @Param("q") String q, @Param("locales") Collection<String> locales, Pageable pageable);
+
+    /**
+     * 包含匹配：前缀无结果时的回退；避免短词全表模糊。
+     */
+    @Query(
+            """
+            SELECT DISTINCT t FROM Taxon t
+            LEFT JOIN TaxonI18n i ON i.taxon = t AND i.locale IN :locales
             WHERE LOWER(t.scientificName) LIKE LOWER(CONCAT('%', :q, '%'))
                OR LOWER(COALESCE(i.commonName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
             """)
-    Page<Taxon> search(@Param("q") String q, @Param("locale") String locale, Pageable pageable);
+    Page<Taxon> searchContains(
+            @Param("q") String q, @Param("locales") Collection<String> locales, Pageable pageable);
 }

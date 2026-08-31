@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 批量化插入/路径回写/俗名写入以支撑全量导入
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -16,6 +17,11 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,7 +39,6 @@ import java.util.zip.ZipFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,6 +50,8 @@ public class ColDwcaImporter {
 
     private static final Logger log = LoggerFactory.getLogger(ColDwcaImporter.class);
     private static final int BATCH_LOG_EVERY = 50_000;
+    private static final int INSERT_BATCH_SIZE = 500;
+    private static final int VERNACULAR_BATCH_SIZE = 500;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -82,7 +89,7 @@ public class ColDwcaImporter {
             ZipEntry taxonEntry = requireEntry(zip, "Taxon.tsv");
             parseTaxa(zip.getInputStream(taxonEntry), kingdoms, properties.getMaxPerRank(), parentIndex, nodes, rankCounters);
 
-            Map<String, Long> externalToId = insertTaxa(nodes, parentIndex);
+            Map<String, Long> externalToId = insertTaxa(nodes, parentIndex, properties.isReplace());
             int vernacularCount = 0;
             if (properties.isImportVernaculars()) {
                 ZipEntry vernacularEntry = zip.getEntry("VernacularName.tsv");
@@ -175,14 +182,29 @@ public class ColDwcaImporter {
         }
     }
 
-    private Map<String, Long> insertTaxa(Map<String, DwcaTaxonRow> nodes, Map<String, String> parentIndex) {
+    private Map<String, Long> insertTaxa(
+            Map<String, DwcaTaxonRow> nodes, Map<String, String> parentIndex, boolean replaced) {
         List<DwcaTaxonRow> ordered = new ArrayList<>(nodes.values());
         ordered.sort(Comparator.comparingInt(r -> r.rank().ordinal()));
 
-        Map<String, Long> externalToId = new HashMap<>(ordered.size() * 2);
-        Map<Long, String> idToPath = new HashMap<>();
-        Map<Long, Integer> childCount = new HashMap<>();
+        Map<String, Long> externalToId = new HashMap<>(Math.max(16, ordered.size() * 2));
+        if (!replaced) {
+            preloadExistingExternalIds(externalToId);
+        }
+
+        Map<Long, String> idToPath = new HashMap<>(Math.max(16, ordered.size() * 2));
+        if (!replaced) {
+            preloadExistingPaths(idToPath);
+        }
+
+        // 同父同学名 → 已有 id（去重并回填 external 映射）
+        Map<String, Long> parentNameToId = new HashMap<>();
+        if (!replaced) {
+            preloadExistingParentNames(parentNameToId);
+        }
+
         Instant now = Instant.now();
+        Timestamp ts = Timestamp.from(now);
 
         String insertSql =
                 """
@@ -192,69 +214,130 @@ public class ColDwcaImporter {
                 VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?)
                 """;
 
-        int inserted = 0;
-        for (DwcaTaxonRow row : ordered) {
-            Long parentDbId = resolveParentDbId(row, nodes, parentIndex, externalToId);
-            // 同父同学名去重：保留先插入的外部记录
-            if (parentDbId == null) {
-                Long existingRoot = findExisting(null, row.scientificName());
-                if (existingRoot != null) {
-                    externalToId.put(row.taxonId(), existingRoot);
-                    continue;
-                }
-            } else {
-                Long existing = findExisting(parentDbId, row.scientificName());
-                if (existing != null) {
-                    externalToId.put(row.taxonId(), existing);
-                    continue;
-                }
-            }
+        AtomicInteger inserted = new AtomicInteger();
+        jdbcTemplate.execute((java.sql.Connection connection) -> {
+            try (PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
+                List<PendingInsert> pending = new ArrayList<>(INSERT_BATCH_SIZE);
+                for (DwcaTaxonRow row : ordered) {
+                    if (externalToId.containsKey(row.taxonId())) {
+                        continue;
+                    }
+                    Long parentDbId = resolveParentDbId(row, nodes, parentIndex, externalToId);
+                    String uniqKey = uniquenessKey(parentDbId, row.scientificName());
+                    Long existingId = parentNameToId.get(uniqKey);
+                    if (existingId != null) {
+                        externalToId.put(row.taxonId(), existingId);
+                        continue;
+                    }
 
-            GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
-            Long finalParentDbId = parentDbId;
-            jdbcTemplate.update(connection -> {
-                PreparedStatement ps = connection.prepareStatement(insertSql, new String[] {"id"});
-                if (finalParentDbId == null) {
-                    ps.setObject(1, null);
-                } else {
-                    ps.setLong(1, finalParentDbId);
+                    if (parentDbId == null) {
+                        ps.setNull(1, Types.BIGINT);
+                    } else {
+                        ps.setLong(1, parentDbId);
+                    }
+                    ps.setString(2, row.rank().name());
+                    ps.setString(3, row.scientificName());
+                    ps.setString(4, "/");
+                    ps.setTimestamp(5, ts);
+                    ps.setTimestamp(6, ts);
+                    ps.setString(7, SOURCE_COL);
+                    ps.setString(8, row.taxonId());
+                    ps.addBatch();
+                    pending.add(new PendingInsert(row, parentDbId, uniqKey));
+
+                    if (pending.size() >= INSERT_BATCH_SIZE) {
+                        flushInsertBatch(ps, pending, externalToId, idToPath, parentNameToId, inserted);
+                        pending.clear();
+                    }
                 }
-                ps.setString(2, row.rank().name());
-                ps.setString(3, row.scientificName());
-                ps.setString(4, "/");
-                ps.setObject(5, java.sql.Timestamp.from(now));
-                ps.setObject(6, java.sql.Timestamp.from(now));
-                ps.setString(7, SOURCE_COL);
-                ps.setString(8, row.taxonId());
-                return ps;
-            }, keyHolder);
+                if (!pending.isEmpty()) {
+                    flushInsertBatch(ps, pending, externalToId, idToPath, parentNameToId, inserted);
+                }
+            } catch (SQLException ex) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Batch insert taxa failed: " + ex.getMessage());
+            }
+            return null;
+        });
 
-            Number key = keyHolder.getKey();
-            if (key == null && keyHolder.getKeys() != null && keyHolder.getKeys().get("id") != null) {
-                key = (Number) keyHolder.getKeys().get("id");
-            }
-            if (key == null) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to obtain generated taxon id");
-            }
-            long id = key.longValue();
-            String path = parentDbId == null ? "/" + id + "/" : idToPath.get(parentDbId) + id + "/";
-            jdbcTemplate.update("UPDATE taxon SET materialized_path = ? WHERE id = ?", path, id);
-            externalToId.put(row.taxonId(), id);
-            idToPath.put(id, path);
-            if (parentDbId != null) {
-                childCount.merge(parentDbId, 1, Integer::sum);
-            }
-            inserted++;
-            if (inserted % BATCH_LOG_EVERY == 0) {
-                log.info("Inserted {} taxa", inserted);
-            }
-        }
-
-        for (Map.Entry<Long, Integer> e : childCount.entrySet()) {
-            jdbcTemplate.update("UPDATE taxon SET child_count = ? WHERE id = ?", e.getValue(), e.getKey());
-        }
-        log.info("Inserted taxa rows={}", inserted);
+        log.info("Inserted taxa rows={}", inserted.get());
         return externalToId;
+    }
+
+    private void flushInsertBatch(
+            PreparedStatement ps,
+            List<PendingInsert> pending,
+            Map<String, Long> externalToId,
+            Map<Long, String> idToPath,
+            Map<String, Long> parentNameToId,
+            AtomicInteger inserted)
+            throws SQLException {
+        ps.executeBatch();
+        List<Long> generatedIds = new ArrayList<>(pending.size());
+        try (ResultSet keys = ps.getGeneratedKeys()) {
+            while (keys.next()) {
+                generatedIds.add(keys.getLong(1));
+            }
+        }
+        if (generatedIds.size() != pending.size()) {
+            throw new BusinessException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Generated key count mismatch: expected " + pending.size() + " got " + generatedIds.size());
+        }
+
+        List<Object[]> pathUpdates = new ArrayList<>(pending.size());
+        for (int i = 0; i < pending.size(); i++) {
+            PendingInsert item = pending.get(i);
+            long id = generatedIds.get(i);
+            Long parentDbId = item.parentDbId();
+            String path;
+            if (parentDbId == null) {
+                path = "/" + id + "/";
+            } else {
+                String parentPath = idToPath.get(parentDbId);
+                if (parentPath == null) {
+                    throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Missing parent path for id=" + parentDbId);
+                }
+                path = parentPath + id + "/";
+            }
+            externalToId.put(item.row().taxonId(), id);
+            idToPath.put(id, path);
+            parentNameToId.put(item.uniqKey(), id);
+            pathUpdates.add(new Object[] {path, id});
+        }
+        jdbcTemplate.batchUpdate("UPDATE taxon SET materialized_path = ? WHERE id = ?", pathUpdates);
+        int total = inserted.addAndGet(pending.size());
+        if (total / BATCH_LOG_EVERY > (total - pending.size()) / BATCH_LOG_EVERY) {
+            log.info("Inserted {} taxa", total);
+        }
+        ps.clearBatch();
+    }
+
+    private void preloadExistingExternalIds(Map<String, Long> externalToId) {
+        jdbcTemplate.query(
+                "SELECT external_id, id FROM taxon WHERE external_source = ? AND external_id IS NOT NULL",
+                rs -> {
+                    externalToId.put(rs.getString(1), rs.getLong(2));
+                },
+                SOURCE_COL);
+        log.info("Preloaded existing COL external ids={}", externalToId.size());
+    }
+
+    private void preloadExistingPaths(Map<Long, String> idToPath) {
+        jdbcTemplate.query("SELECT id, materialized_path FROM taxon", rs -> {
+            idToPath.put(rs.getLong(1), rs.getString(2));
+        });
+    }
+
+    private void preloadExistingParentNames(Map<String, Long> parentNameToId) {
+        jdbcTemplate.query("SELECT parent_id, scientific_name, id FROM taxon", rs -> {
+            Long parentId = rs.getObject(1) == null ? null : rs.getLong(1);
+            parentNameToId.putIfAbsent(uniquenessKey(parentId, rs.getString(2)), rs.getLong(3));
+        });
+    }
+
+    private static String uniquenessKey(Long parentId, String scientificName) {
+        String parentPart = parentId == null ? "ROOT" : parentId.toString();
+        return parentPart + "|" + scientificName.toLowerCase(Locale.ROOT);
     }
 
     private Long resolveParentDbId(
@@ -290,22 +373,6 @@ public class ColDwcaImporter {
         return null;
     }
 
-    private Long findExisting(Long parentId, String scientificName) {
-        if (parentId == null) {
-            List<Long> ids = jdbcTemplate.query(
-                    "SELECT id FROM taxon WHERE parent_id IS NULL AND scientific_name = ?",
-                    (rs, rowNum) -> rs.getLong(1),
-                    scientificName);
-            return ids.isEmpty() ? null : ids.getFirst();
-        }
-        List<Long> ids = jdbcTemplate.query(
-                "SELECT id FROM taxon WHERE parent_id = ? AND scientific_name = ?",
-                (rs, rowNum) -> rs.getLong(1),
-                parentId,
-                scientificName);
-        return ids.isEmpty() ? null : ids.getFirst();
-    }
-
     private int importVernaculars(InputStream in, Map<String, Long> externalToId) throws IOException {
         Map<String, Map<String, String>> best = new HashMap<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8), 1 << 20)) {
@@ -332,37 +399,45 @@ public class ColDwcaImporter {
             }
         }
 
-        String sql =
-                """
-                INSERT INTO taxon_i18n (taxon_id, locale, common_name, summary, description)
-                VALUES (?, ?, ?, NULL, NULL)
-                ON DUPLICATE KEY UPDATE common_name = VALUES(common_name)
-                """;
-        // H2 兼容：先查再插
+        // 已有 (taxon_id, locale) 键，避免逐条 SELECT
+        Set<String> existingKeys = new HashSet<>();
+        jdbcTemplate.query("SELECT taxon_id, locale FROM taxon_i18n", rs -> {
+            existingKeys.add(rs.getLong(1) + "|" + rs.getString(2));
+        });
+
+        List<Object[]> inserts = new ArrayList<>();
+        List<Object[]> updates = new ArrayList<>();
         int count = 0;
         for (Map.Entry<String, Map<String, String>> e : best.entrySet()) {
             Long taxonId = externalToId.get(e.getKey());
             for (Map.Entry<String, String> loc : e.getValue().entrySet()) {
-                Integer exists = jdbcTemplate.query(
-                        "SELECT id FROM taxon_i18n WHERE taxon_id = ? AND locale = ?",
-                        rs -> rs.next() ? rs.getInt(1) : null,
-                        taxonId,
-                        loc.getKey());
-                if (exists == null) {
-                    jdbcTemplate.update(
-                            "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)",
-                            taxonId,
-                            loc.getKey(),
-                            loc.getValue());
+                String key = taxonId + "|" + loc.getKey();
+                if (existingKeys.contains(key)) {
+                    updates.add(new Object[] {loc.getValue(), taxonId, loc.getKey()});
                 } else {
-                    jdbcTemplate.update(
-                            "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?",
-                            loc.getValue(),
-                            taxonId,
-                            loc.getKey());
+                    inserts.add(new Object[] {taxonId, loc.getKey(), loc.getValue()});
+                    existingKeys.add(key);
                 }
                 count++;
+                if (inserts.size() >= VERNACULAR_BATCH_SIZE) {
+                    jdbcTemplate.batchUpdate(
+                            "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)", inserts);
+                    inserts.clear();
+                }
+                if (updates.size() >= VERNACULAR_BATCH_SIZE) {
+                    jdbcTemplate.batchUpdate(
+                            "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?", updates);
+                    updates.clear();
+                }
             }
+        }
+        if (!inserts.isEmpty()) {
+            jdbcTemplate.batchUpdate(
+                    "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)", inserts);
+        }
+        if (!updates.isEmpty()) {
+            jdbcTemplate.batchUpdate(
+                    "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?", updates);
         }
         log.info("Imported vernacular rows={}", count);
         return count;
@@ -370,18 +445,23 @@ public class ColDwcaImporter {
 
     private void rebuildChildCounts() {
         jdbcTemplate.update("UPDATE taxon SET child_count = 0");
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+        List<Object[]> batches = new ArrayList<>();
+        jdbcTemplate.query(
                 """
                 SELECT parent_id AS pid, COUNT(*) AS cnt
                 FROM taxon
                 WHERE parent_id IS NOT NULL
                 GROUP BY parent_id
-                """);
-        for (Map<String, Object> row : rows) {
-            jdbcTemplate.update(
-                    "UPDATE taxon SET child_count = ? WHERE id = ?",
-                    ((Number) row.get("cnt")).intValue(),
-                    ((Number) row.get("pid")).longValue());
+                """,
+                rs -> {
+                    batches.add(new Object[] {rs.getInt("cnt"), rs.getLong("pid")});
+                    if (batches.size() >= INSERT_BATCH_SIZE) {
+                        jdbcTemplate.batchUpdate("UPDATE taxon SET child_count = ? WHERE id = ?", batches);
+                        batches.clear();
+                    }
+                });
+        if (!batches.isEmpty()) {
+            jdbcTemplate.batchUpdate("UPDATE taxon SET child_count = ? WHERE id = ?", batches);
         }
     }
 
@@ -412,6 +492,9 @@ public class ColDwcaImporter {
             map.put(rank.name().toLowerCase(Locale.ROOT), counters.get(rank).get());
         }
         return map;
+    }
+
+    private record PendingInsert(DwcaTaxonRow row, Long parentDbId, String uniqKey) {
     }
 
     public record ImportStats(int taxonCount, int vernacularCount, Map<String, Integer> byRank) {

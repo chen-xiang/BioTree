@@ -5,6 +5,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 支持编辑态配图上传与删除
+ * Updated: 2026-08-31 支持节点移动与设计系统表单控件
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -14,6 +15,7 @@ import {
   deleteTaxonMedia,
   fetchChildren,
   fetchTaxonDetail,
+  moveTaxon,
   updateTaxon,
   uploadTaxonMedia,
   type TaxonDetail,
@@ -21,6 +23,8 @@ import {
   type TaxonRank,
 } from '@/api/taxon'
 import BtButton from '@/components/ui/BtButton.vue'
+import BtInput from '@/components/ui/BtInput.vue'
+import BtSelect from '@/components/ui/BtSelect.vue'
 import { useLocaleStore } from '@/stores/locale'
 
 const RANKS: TaxonRank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES']
@@ -28,6 +32,7 @@ const RANKS: TaxonRank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GE
 const { t } = useI18n()
 const localeStore = useLocaleStore()
 const apiLocale = computed(() => localeStore.locale)
+const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rank })))
 
 const parentId = ref<number | null>(null)
 const parentLabel = ref(t('admin.root'))
@@ -105,6 +110,21 @@ async function onSubmit() {
       message.value = t('admin.created')
       resetForm()
     }
+    await loadList()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'failed'
+  }
+}
+
+async function onMoveHere() {
+  if (!editing.value || parentId.value == null) {
+    return
+  }
+  error.value = ''
+  message.value = ''
+  try {
+    editing.value = await moveTaxon(editing.value.id, parentId.value, apiLocale.value)
+    message.value = t('admin.moved')
     await loadList()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'failed'
@@ -219,21 +239,19 @@ watch(apiLocale, loadList)
         <h2>{{ editing ? t('admin.edit') : t('admin.create') }}</h2>
         <label>
           <span>{{ t('admin.rank') }}</span>
-          <select v-model="form.rank" :disabled="!!editing">
-            <option v-for="rank in RANKS" :key="rank" :value="rank">{{ rank }}</option>
-          </select>
+          <BtSelect v-model="form.rank" :options="rankOptions" :disabled="!!editing" />
         </label>
         <label>
           <span>{{ t('admin.scientificName') }}</span>
-          <input v-model="form.scientificName" required />
+          <BtInput v-model="form.scientificName" :required="true" />
         </label>
         <label>
           <span>{{ t('admin.commonName') }}</span>
-          <input v-model="form.commonName" />
+          <BtInput v-model="form.commonName" />
         </label>
         <label>
           <span>{{ t('admin.summary') }}</span>
-          <input v-model="form.summary" />
+          <BtInput v-model="form.summary" />
         </label>
         <label>
           <span>{{ t('admin.description') }}</span>
@@ -242,7 +260,16 @@ watch(apiLocale, loadList)
         <div class="actions">
           <BtButton type="submit">{{ t('common.save') }}</BtButton>
           <BtButton type="button" variant="ghost" @click="resetForm">{{ t('common.cancel') }}</BtButton>
+          <BtButton
+            v-if="editing && parentId != null && editing.parentId !== parentId"
+            type="button"
+            variant="ghost"
+            @click="onMoveHere"
+          >
+            {{ t('admin.move') }}
+          </BtButton>
         </div>
+        <p v-if="editing && parentId != null" class="muted">{{ t('admin.moveHint') }}</p>
 
         <div v-if="editing" class="media-block">
           <h3>{{ t('admin.media') }}</h3>
@@ -259,7 +286,7 @@ watch(apiLocale, loadList)
           </div>
           <label>
             <span>{{ t('admin.mediaCaption') }}</span>
-            <input v-model="mediaCaption" />
+            <BtInput v-model="mediaCaption" />
           </label>
           <input
             type="file"
@@ -359,8 +386,6 @@ label {
   color: var(--color-text-muted);
 }
 
-input,
-select,
 textarea {
   width: 100%;
   border: 1px solid var(--color-border);
@@ -373,6 +398,7 @@ textarea {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 

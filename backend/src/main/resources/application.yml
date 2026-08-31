@@ -22,10 +22,13 @@ spring:
       max-file-size: 5MB
       max-request-size: 6MB
     session:
+      timeout: 8h
       cookie:
         name: BIOTREESESSION
         http-only: true
         same-site: lax
+        # 生产环境 HTTPS 下改为 true
+        secure: false
 
 server:
   port: 8080

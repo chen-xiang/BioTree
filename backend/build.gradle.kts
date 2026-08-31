@@ -26,6 +26,7 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-mysql")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
+    implementation("com.aliyun.oss:aliyun-sdk-oss:3.18.1")
 
     runtimeOnly("com.mysql:mysql-connector-j")
 
