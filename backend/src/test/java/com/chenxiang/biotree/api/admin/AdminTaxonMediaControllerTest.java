@@ -3,9 +3,11 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-08-31 适配 Cookie CSRF
  */
 package com.chenxiang.biotree.api.admin;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,7 +38,7 @@ class AdminTaxonMediaControllerTest {
     @Test
     void uploadRequiresAuth() throws Exception {
         MockMultipartFile file = pngFile();
-        mockMvc.perform(multipart("/api/admin/taxa/{taxonId}/media", 8).file(file))
+        mockMvc.perform(multipart("/api/admin/taxa/{taxonId}/media", 8).file(file).with(csrf()))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -46,6 +48,7 @@ class AdminTaxonMediaControllerTest {
         String body = mockMvc.perform(multipart("/api/admin/taxa/{taxonId}/media", 8)
                         .file(file)
                         .param("caption", "demo")
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.url").exists())
@@ -61,6 +64,7 @@ class AdminTaxonMediaControllerTest {
                 .andExpect(jsonPath("$.data.media.length()").value(1));
 
         mockMvc.perform(delete("/api/admin/taxa/{taxonId}/media/{mediaId}", 8, mediaId)
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
@@ -72,6 +76,7 @@ class AdminTaxonMediaControllerTest {
                 new MockMultipartFile("file", "note.txt", "text/plain", "hello".getBytes());
         mockMvc.perform(multipart("/api/admin/taxa/{taxonId}/media", 8)
                         .file(file)
+                        .with(csrf())
                         .with(user("admin").roles("ADMIN")))
                 .andExpect(status().isBadRequest());
     }

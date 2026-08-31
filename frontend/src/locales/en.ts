@@ -36,6 +36,7 @@ export default {
     selectHint: 'Select a taxon on the left to view details.',
     childrenCount: '{n} children',
     loadMore: 'Load more',
+    synonyms: 'Synonyms',
   },
   theme: {
     light: 'Light',

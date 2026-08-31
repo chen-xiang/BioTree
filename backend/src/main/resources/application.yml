@@ -16,7 +16,7 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration,classpath:db/migration-mysql
   servlet:
     multipart:
       max-file-size: 5MB
@@ -66,11 +66,17 @@ app:
     enabled: false
     dwca-path: ../data/import/col_latest_dwca.zip
     replace: false
+    resume: true
     kingdoms:
       - Animalia
       - Plantae
     max-per-rank: 0
     import-vernaculars: true
+    import-synonyms: true
+    commit-batch-size: 500
+  cache:
+    # 公开只读 API 的 Cache-Control max-age（秒）；0 表示不缓存
+    public-max-age-seconds: 60
 
 logging:
   level:

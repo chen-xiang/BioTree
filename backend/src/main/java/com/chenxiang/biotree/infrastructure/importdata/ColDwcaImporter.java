@@ -1,9 +1,10 @@
 /**
- * Catalogue of Life DwC-A 导入器：动物界/植物界七级分类 + 中英俗名。
+ * Catalogue of Life DwC-A 导入器：动物界/植物界七级分类 + 中英俗名 + 异名。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 批量化插入/路径回写/俗名写入以支撑全量导入
+ * Updated: 2026-08-31 小事务断点续跑与异名导入
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
@@ -40,7 +42,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -50,16 +53,24 @@ public class ColDwcaImporter {
 
     private static final Logger log = LoggerFactory.getLogger(ColDwcaImporter.class);
     private static final int BATCH_LOG_EVERY = 50_000;
-    private static final int INSERT_BATCH_SIZE = 500;
-    private static final int VERNACULAR_BATCH_SIZE = 500;
+    private static final String PHASE_TAXA = "TAXA";
+    private static final String PHASE_VERNACULARS = "VERNACULARS";
+    private static final String PHASE_SYNONYMS = "SYNONYMS";
+    private static final String PHASE_COUNTS = "COUNTS";
 
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
+    private final ImportCheckpointRepository checkpointRepository;
 
-    public ColDwcaImporter(JdbcTemplate jdbcTemplate) {
+    public ColDwcaImporter(
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager,
+            ImportCheckpointRepository checkpointRepository) {
         this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.checkpointRepository = checkpointRepository;
     }
 
-    @Transactional
     public ImportStats importArchive(Path dwcaZip, ImportProperties properties) {
         if (dwcaZip == null || !dwcaZip.toFile().isFile()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "DwC-A zip not found");
@@ -74,12 +85,25 @@ public class ColDwcaImporter {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one kingdom is required");
         }
 
-        if (properties.isReplace()) {
-            clearTaxonData();
+        String jobKey = StringUtils.hasText(properties.getJobKey()) ? properties.getJobKey() : SOURCE_COL;
+        Optional<ImportCheckpointRepository.Checkpoint> existing = checkpointRepository.find(jobKey);
+        boolean resuming = properties.isResume() && existing.isPresent();
+        boolean doReplace = properties.isReplace() && !resuming;
+        if (doReplace) {
+            transactionTemplate.executeWithoutResult(status -> clearTaxonData());
+            checkpointRepository.delete(jobKey);
+        }
+        if (resuming) {
+            log.info(
+                    "Resuming COL import jobKey={} phase={} processed={}",
+                    jobKey,
+                    existing.get().phase(),
+                    existing.get().processedCount());
         }
 
         Map<String, String> parentIndex = new HashMap<>();
         Map<String, DwcaTaxonRow> nodes = new LinkedHashMap<>();
+        List<SynonymCandidate> synonymCandidates = new ArrayList<>();
         Map<TaxonRank, AtomicInteger> rankCounters = new EnumMap<>(TaxonRank.class);
         for (TaxonRank rank : TaxonRank.values()) {
             rankCounters.put(rank, new AtomicInteger());
@@ -87,22 +111,47 @@ public class ColDwcaImporter {
 
         try (ZipFile zip = new ZipFile(dwcaZip.toFile())) {
             ZipEntry taxonEntry = requireEntry(zip, "Taxon.tsv");
-            parseTaxa(zip.getInputStream(taxonEntry), kingdoms, properties.getMaxPerRank(), parentIndex, nodes, rankCounters);
+            parseTaxa(
+                    zip.getInputStream(taxonEntry),
+                    kingdoms,
+                    properties.getMaxPerRank(),
+                    parentIndex,
+                    nodes,
+                    synonymCandidates,
+                    rankCounters,
+                    properties.isImportSynonyms());
 
-            Map<String, Long> externalToId = insertTaxa(nodes, parentIndex, properties.isReplace());
+            checkpointRepository.upsert(jobKey, PHASE_TAXA, 0, nodes.size(), "parsed");
+            int batchSize = Math.max(50, properties.getCommitBatchSize());
+            Map<String, Long> externalToId = insertTaxa(nodes, parentIndex, !doReplace, jobKey, batchSize);
+
+            String phase = checkpointRepository.find(jobKey).map(ImportCheckpointRepository.Checkpoint::phase).orElse(PHASE_TAXA);
             int vernacularCount = 0;
-            if (properties.isImportVernaculars()) {
+            if (properties.isImportVernaculars() && phaseOrder(phase) <= phaseOrder(PHASE_VERNACULARS)) {
+                checkpointRepository.upsert(jobKey, PHASE_VERNACULARS, 0, null, null);
                 ZipEntry vernacularEntry = zip.getEntry("VernacularName.tsv");
                 if (vernacularEntry != null) {
-                    vernacularCount = importVernaculars(zip.getInputStream(vernacularEntry), externalToId);
+                    vernacularCount = importVernaculars(zip.getInputStream(vernacularEntry), externalToId, batchSize);
                 }
             }
-            rebuildChildCounts();
-            ImportStats stats = new ImportStats(nodes.size(), vernacularCount, Map.copyOf(toIntMap(rankCounters)));
+
+            int synonymCount = 0;
+            if (properties.isImportSynonyms() && phaseOrder(phase) <= phaseOrder(PHASE_SYNONYMS)) {
+                checkpointRepository.upsert(jobKey, PHASE_SYNONYMS, 0, synonymCandidates.size(), null);
+                synonymCount = importSynonyms(synonymCandidates, externalToId, batchSize);
+            }
+
+            checkpointRepository.upsert(jobKey, PHASE_COUNTS, 0, null, null);
+            transactionTemplate.executeWithoutResult(status -> rebuildChildCounts());
+            checkpointRepository.delete(jobKey);
+
+            ImportStats stats = new ImportStats(
+                    nodes.size(), vernacularCount, synonymCount, Map.copyOf(toIntMap(rankCounters)));
             log.info(
-                    "COL import finished taxa={} vernaculars={} byRank={}",
+                    "COL import finished taxa={} vernaculars={} synonyms={} byRank={}",
                     stats.taxonCount(),
                     stats.vernacularCount(),
+                    stats.synonymCount(),
                     stats.byRank());
             return stats;
         } catch (IOException ex) {
@@ -117,7 +166,9 @@ public class ColDwcaImporter {
             int maxPerRank,
             Map<String, String> parentIndex,
             Map<String, DwcaTaxonRow> nodes,
-            Map<TaxonRank, AtomicInteger> rankCounters)
+            List<SynonymCandidate> synonymCandidates,
+            Map<TaxonRank, AtomicInteger> rankCounters,
+            boolean collectSynonyms)
             throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8), 1 << 20)) {
             String header = reader.readLine();
@@ -137,6 +188,7 @@ public class ColDwcaImporter {
                 }
                 String taxonId = cols[0];
                 String parentId = emptyToNull(cols[1]);
+                String acceptedId = emptyToNull(cols[2]);
                 String status = cols[6];
                 String rankRaw = cols[7];
                 String scientificName = cols[8];
@@ -144,18 +196,27 @@ public class ColDwcaImporter {
                 String specificEpithet = cols.length > 13 ? cols[13] : "";
                 String kingdom = cols[20];
 
+                parentIndex.put(taxonId, parentId);
+
                 if (!"accepted".equalsIgnoreCase(status)) {
+                    if (collectSynonyms
+                            && acceptedId != null
+                            && StringUtils.hasText(scientificName)
+                            && scientificName.length() <= 255) {
+                        String canonical = ColNameUtils.stripAuthorship(scientificName);
+                        if (StringUtils.hasText(canonical)) {
+                            synonymCandidates.add(new SynonymCandidate(taxonId, acceptedId, canonical));
+                        }
+                    }
                     continue;
                 }
                 if (!StringUtils.hasText(kingdom) || !kingdoms.contains(kingdom)) {
-                    // 界本身的 kingdom 列可能为空，回退到学名
-                    if (!("kingdom".equalsIgnoreCase(rankRaw) && kingdoms.contains(ColNameUtils.stripAuthorship(scientificName)))) {
+                    if (!("kingdom".equalsIgnoreCase(rankRaw)
+                            && kingdoms.contains(ColNameUtils.stripAuthorship(scientificName)))) {
                         continue;
                     }
                     kingdom = ColNameUtils.stripAuthorship(scientificName);
                 }
-
-                parentIndex.put(taxonId, parentId);
 
                 var rankOpt = ColNameUtils.mapRank(rankRaw);
                 if (rankOpt.isEmpty()) {
@@ -178,154 +239,197 @@ public class ColDwcaImporter {
                     log.info("Scanned {} taxon rows, selected {}", scanned, nodes.size());
                 }
             }
-            log.info("Finished scanning taxa rows={}, selected={}", scanned, nodes.size());
+            log.info(
+                    "Finished scanning taxa rows={}, selected={}, synonymCandidates={}",
+                    scanned,
+                    nodes.size(),
+                    synonymCandidates.size());
         }
     }
 
     private Map<String, Long> insertTaxa(
-            Map<String, DwcaTaxonRow> nodes, Map<String, String> parentIndex, boolean replaced) {
+            Map<String, DwcaTaxonRow> nodes,
+            Map<String, String> parentIndex,
+            boolean preloadExisting,
+            String jobKey,
+            int batchSize) {
         List<DwcaTaxonRow> ordered = new ArrayList<>(nodes.values());
         ordered.sort(Comparator.comparingInt(r -> r.rank().ordinal()));
 
         Map<String, Long> externalToId = new HashMap<>(Math.max(16, ordered.size() * 2));
-        if (!replaced) {
-            preloadExistingExternalIds(externalToId);
-        }
-
         Map<Long, String> idToPath = new HashMap<>(Math.max(16, ordered.size() * 2));
-        if (!replaced) {
-            preloadExistingPaths(idToPath);
-        }
-
-        // 同父同学名 → 已有 id（去重并回填 external 映射）
         Map<String, Long> parentNameToId = new HashMap<>();
-        if (!replaced) {
+        if (preloadExisting) {
+            preloadExistingExternalIds(externalToId);
+            preloadExistingPaths(idToPath);
             preloadExistingParentNames(parentNameToId);
         }
 
         Instant now = Instant.now();
         Timestamp ts = Timestamp.from(now);
-
-        String insertSql =
-                """
-                INSERT INTO taxon
-                (parent_id, taxon_rank, scientific_name, materialized_path, child_count, is_accepted,
-                 created_at, updated_at, created_by, external_source, external_id)
-                VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?)
-                """;
-
         AtomicInteger inserted = new AtomicInteger();
-        jdbcTemplate.execute((java.sql.Connection connection) -> {
-            try (PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
-                List<PendingInsert> pending = new ArrayList<>(INSERT_BATCH_SIZE);
-                for (DwcaTaxonRow row : ordered) {
-                    if (externalToId.containsKey(row.taxonId())) {
-                        continue;
-                    }
-                    Long parentDbId = resolveParentDbId(row, nodes, parentIndex, externalToId);
-                    String uniqKey = uniquenessKey(parentDbId, row.scientificName());
-                    Long existingId = parentNameToId.get(uniqKey);
-                    if (existingId != null) {
-                        externalToId.put(row.taxonId(), existingId);
-                        continue;
-                    }
+        List<PendingInsert> pending = new ArrayList<>(batchSize);
 
-                    if (parentDbId == null) {
-                        ps.setNull(1, Types.BIGINT);
-                    } else {
-                        ps.setLong(1, parentDbId);
-                    }
-                    ps.setString(2, row.rank().name());
-                    ps.setString(3, row.scientificName());
-                    ps.setString(4, "/");
-                    ps.setTimestamp(5, ts);
-                    ps.setTimestamp(6, ts);
-                    ps.setString(7, SOURCE_COL);
-                    ps.setString(8, row.taxonId());
-                    ps.addBatch();
-                    pending.add(new PendingInsert(row, parentDbId, uniqKey));
-
-                    if (pending.size() >= INSERT_BATCH_SIZE) {
-                        flushInsertBatch(ps, pending, externalToId, idToPath, parentNameToId, inserted);
-                        pending.clear();
-                    }
-                }
-                if (!pending.isEmpty()) {
-                    flushInsertBatch(ps, pending, externalToId, idToPath, parentNameToId, inserted);
-                }
-            } catch (SQLException ex) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Batch insert taxa failed: " + ex.getMessage());
+        for (DwcaTaxonRow row : ordered) {
+            if (externalToId.containsKey(row.taxonId())) {
+                continue;
             }
-            return null;
-        });
-
+            Long parentDbId = resolveParentDbId(row, nodes, parentIndex, externalToId);
+            String uniqKey = uniquenessKey(parentDbId, row.scientificName());
+            Long existingId = parentNameToId.get(uniqKey);
+            if (existingId != null) {
+                externalToId.put(row.taxonId(), existingId);
+                continue;
+            }
+            pending.add(new PendingInsert(row, parentDbId, uniqKey));
+            if (pending.size() >= batchSize) {
+                flushInsertBatch(pending, externalToId, idToPath, parentNameToId, inserted, ts, jobKey, ordered.size());
+                pending = new ArrayList<>(batchSize);
+            }
+        }
+        if (!pending.isEmpty()) {
+            flushInsertBatch(pending, externalToId, idToPath, parentNameToId, inserted, ts, jobKey, ordered.size());
+        }
         log.info("Inserted taxa rows={}", inserted.get());
         return externalToId;
     }
 
     private void flushInsertBatch(
-            PreparedStatement ps,
             List<PendingInsert> pending,
             Map<String, Long> externalToId,
             Map<Long, String> idToPath,
             Map<String, Long> parentNameToId,
-            AtomicInteger inserted)
-            throws SQLException {
-        ps.executeBatch();
-        List<Long> generatedIds = new ArrayList<>(pending.size());
-        try (ResultSet keys = ps.getGeneratedKeys()) {
-            while (keys.next()) {
-                generatedIds.add(keys.getLong(1));
-            }
-        }
-        if (generatedIds.size() != pending.size()) {
-            throw new BusinessException(
-                    ErrorCode.INTERNAL_ERROR,
-                    "Generated key count mismatch: expected " + pending.size() + " got " + generatedIds.size());
-        }
-
-        List<Object[]> pathUpdates = new ArrayList<>(pending.size());
-        for (int i = 0; i < pending.size(); i++) {
-            PendingInsert item = pending.get(i);
-            long id = generatedIds.get(i);
-            Long parentDbId = item.parentDbId();
-            String path;
-            if (parentDbId == null) {
-                path = "/" + id + "/";
-            } else {
-                String parentPath = idToPath.get(parentDbId);
-                if (parentPath == null) {
-                    throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Missing parent path for id=" + parentDbId);
+            AtomicInteger inserted,
+            Timestamp ts,
+            String jobKey,
+            int totalHint) {
+        transactionTemplate.executeWithoutResult(status -> {
+            String insertSql =
+                    """
+                    INSERT INTO taxon
+                    (parent_id, taxon_rank, scientific_name, materialized_path, child_count, is_accepted,
+                     created_at, updated_at, created_by, external_source, external_id)
+                    VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?)
+                    """;
+            jdbcTemplate.execute((java.sql.Connection connection) -> {
+                try (PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
+                    for (PendingInsert item : pending) {
+                        if (item.parentDbId() == null) {
+                            ps.setNull(1, Types.BIGINT);
+                        } else {
+                            ps.setLong(1, item.parentDbId());
+                        }
+                        ps.setString(2, item.row().rank().name());
+                        ps.setString(3, item.row().scientificName());
+                        ps.setString(4, "/");
+                        ps.setTimestamp(5, ts);
+                        ps.setTimestamp(6, ts);
+                        ps.setString(7, SOURCE_COL);
+                        ps.setString(8, item.row().taxonId());
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                    List<Long> generatedIds = new ArrayList<>(pending.size());
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        while (keys.next()) {
+                            generatedIds.add(keys.getLong(1));
+                        }
+                    }
+                    if (generatedIds.size() != pending.size()) {
+                        throw new BusinessException(
+                                ErrorCode.INTERNAL_ERROR,
+                                "Generated key count mismatch: expected "
+                                        + pending.size()
+                                        + " got "
+                                        + generatedIds.size());
+                    }
+                    List<Object[]> pathUpdates = new ArrayList<>(pending.size());
+                    for (int i = 0; i < pending.size(); i++) {
+                        PendingInsert item = pending.get(i);
+                        long id = generatedIds.get(i);
+                        Long parentDbId = item.parentDbId();
+                        String path = parentDbId == null
+                                ? "/" + id + "/"
+                                : requireParentPath(idToPath, parentDbId) + id + "/";
+                        externalToId.put(item.row().taxonId(), id);
+                        idToPath.put(id, path);
+                        parentNameToId.put(item.uniqKey(), id);
+                        pathUpdates.add(new Object[] {path, id});
+                    }
+                    jdbcTemplate.batchUpdate("UPDATE taxon SET materialized_path = ? WHERE id = ?", pathUpdates);
+                } catch (SQLException ex) {
+                    throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Batch insert taxa failed: " + ex.getMessage());
                 }
-                path = parentPath + id + "/";
+                return null;
+            });
+            int total = inserted.addAndGet(pending.size());
+            checkpointRepository.upsert(jobKey, PHASE_TAXA, total, totalHint, null);
+            if (total / BATCH_LOG_EVERY > (total - pending.size()) / BATCH_LOG_EVERY) {
+                log.info("Inserted {} / ~{} taxa", total, totalHint);
             }
-            externalToId.put(item.row().taxonId(), id);
-            idToPath.put(id, path);
-            parentNameToId.put(item.uniqKey(), id);
-            pathUpdates.add(new Object[] {path, id});
+        });
+    }
+
+    private static String requireParentPath(Map<Long, String> idToPath, Long parentDbId) {
+        String parentPath = idToPath.get(parentDbId);
+        if (parentPath == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Missing parent path for id=" + parentDbId);
         }
-        jdbcTemplate.batchUpdate("UPDATE taxon SET materialized_path = ? WHERE id = ?", pathUpdates);
-        int total = inserted.addAndGet(pending.size());
-        if (total / BATCH_LOG_EVERY > (total - pending.size()) / BATCH_LOG_EVERY) {
-            log.info("Inserted {} taxa", total);
+        return parentPath;
+    }
+
+    private int importSynonyms(List<SynonymCandidate> candidates, Map<String, Long> externalToId, int batchSize) {
+        Set<String> existingExt = new HashSet<>();
+        jdbcTemplate.query(
+                "SELECT external_id FROM taxon_synonym WHERE external_source = ?",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> existingExt.add(rs.getString(1)),
+                SOURCE_COL);
+
+        List<Object[]> batch = new ArrayList<>(batchSize);
+        AtomicInteger count = new AtomicInteger();
+        for (SynonymCandidate c : candidates) {
+            Long taxonId = externalToId.get(c.acceptedExternalId());
+            if (taxonId == null || existingExt.contains(c.synonymExternalId())) {
+                continue;
+            }
+            existingExt.add(c.synonymExternalId());
+            batch.add(new Object[] {taxonId, c.scientificName(), SOURCE_COL, c.synonymExternalId()});
+            if (batch.size() >= batchSize) {
+                flushSynonymBatch(batch, count);
+                batch = new ArrayList<>(batchSize);
+            }
         }
-        ps.clearBatch();
+        if (!batch.isEmpty()) {
+            flushSynonymBatch(batch, count);
+        }
+        log.info("Imported synonym rows={}", count.get());
+        return count.get();
+    }
+
+    private void flushSynonymBatch(List<Object[]> batch, AtomicInteger count) {
+        transactionTemplate.executeWithoutResult(status -> jdbcTemplate.batchUpdate(
+                """
+                INSERT INTO taxon_synonym (taxon_id, scientific_name, external_source, external_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                batch));
+        count.addAndGet(batch.size());
     }
 
     private void preloadExistingExternalIds(Map<String, Long> externalToId) {
         jdbcTemplate.query(
                 "SELECT external_id, id FROM taxon WHERE external_source = ? AND external_id IS NOT NULL",
-                rs -> {
-                    externalToId.put(rs.getString(1), rs.getLong(2));
-                },
+                (org.springframework.jdbc.core.RowCallbackHandler)
+                        rs -> externalToId.put(rs.getString(1), rs.getLong(2)),
                 SOURCE_COL);
         log.info("Preloaded existing COL external ids={}", externalToId.size());
     }
 
     private void preloadExistingPaths(Map<Long, String> idToPath) {
-        jdbcTemplate.query("SELECT id, materialized_path FROM taxon", rs -> {
-            idToPath.put(rs.getLong(1), rs.getString(2));
-        });
+        jdbcTemplate.query(
+                "SELECT id, materialized_path FROM taxon",
+                (org.springframework.jdbc.core.RowCallbackHandler)
+                        rs -> idToPath.put(rs.getLong(1), rs.getString(2)));
     }
 
     private void preloadExistingParentNames(Map<String, Long> parentNameToId) {
@@ -354,13 +458,11 @@ public class ColDwcaImporter {
             if (nodes.containsKey(cursor) && externalToId.containsKey(cursor)) {
                 return externalToId.get(cursor);
             }
-            // 父级是被跳过的中间等级时继续向上
             if (externalToId.containsKey(cursor)) {
                 return externalToId.get(cursor);
             }
             cursor = parentIndex.get(cursor);
         }
-        // 回退：按界名挂到对应界
         if (StringUtils.hasText(row.kingdom())) {
             for (Map.Entry<String, DwcaTaxonRow> e : nodes.entrySet()) {
                 if (e.getValue().rank() == TaxonRank.KINGDOM
@@ -373,10 +475,10 @@ public class ColDwcaImporter {
         return null;
     }
 
-    private int importVernaculars(InputStream in, Map<String, Long> externalToId) throws IOException {
+    private int importVernaculars(InputStream in, Map<String, Long> externalToId, int batchSize) throws IOException {
         Map<String, Map<String, String>> best = new HashMap<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8), 1 << 20)) {
-            reader.readLine(); // header
+            reader.readLine();
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] cols = line.split("\t", -1);
@@ -399,15 +501,15 @@ public class ColDwcaImporter {
             }
         }
 
-        // 已有 (taxon_id, locale) 键，避免逐条 SELECT
         Set<String> existingKeys = new HashSet<>();
-        jdbcTemplate.query("SELECT taxon_id, locale FROM taxon_i18n", rs -> {
-            existingKeys.add(rs.getLong(1) + "|" + rs.getString(2));
-        });
+        jdbcTemplate.query(
+                "SELECT taxon_id, locale FROM taxon_i18n",
+                (org.springframework.jdbc.core.RowCallbackHandler)
+                        rs -> existingKeys.add(rs.getLong(1) + "|" + rs.getString(2)));
 
         List<Object[]> inserts = new ArrayList<>();
         List<Object[]> updates = new ArrayList<>();
-        int count = 0;
+        AtomicInteger count = new AtomicInteger();
         for (Map.Entry<String, Map<String, String>> e : best.entrySet()) {
             Long taxonId = externalToId.get(e.getKey());
             for (Map.Entry<String, String> loc : e.getValue().entrySet()) {
@@ -418,29 +520,35 @@ public class ColDwcaImporter {
                     inserts.add(new Object[] {taxonId, loc.getKey(), loc.getValue()});
                     existingKeys.add(key);
                 }
-                count++;
-                if (inserts.size() >= VERNACULAR_BATCH_SIZE) {
-                    jdbcTemplate.batchUpdate(
-                            "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)", inserts);
-                    inserts.clear();
+                count.incrementAndGet();
+                if (inserts.size() >= batchSize) {
+                    flushVernacularInserts(inserts);
+                    inserts = new ArrayList<>();
                 }
-                if (updates.size() >= VERNACULAR_BATCH_SIZE) {
-                    jdbcTemplate.batchUpdate(
-                            "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?", updates);
-                    updates.clear();
+                if (updates.size() >= batchSize) {
+                    flushVernacularUpdates(updates);
+                    updates = new ArrayList<>();
                 }
             }
         }
         if (!inserts.isEmpty()) {
-            jdbcTemplate.batchUpdate(
-                    "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)", inserts);
+            flushVernacularInserts(inserts);
         }
         if (!updates.isEmpty()) {
-            jdbcTemplate.batchUpdate(
-                    "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?", updates);
+            flushVernacularUpdates(updates);
         }
-        log.info("Imported vernacular rows={}", count);
-        return count;
+        log.info("Imported vernacular rows={}", count.get());
+        return count.get();
+    }
+
+    private void flushVernacularInserts(List<Object[]> inserts) {
+        transactionTemplate.executeWithoutResult(status -> jdbcTemplate.batchUpdate(
+                "INSERT INTO taxon_i18n (taxon_id, locale, common_name) VALUES (?, ?, ?)", inserts));
+    }
+
+    private void flushVernacularUpdates(List<Object[]> updates) {
+        transactionTemplate.executeWithoutResult(status -> jdbcTemplate.batchUpdate(
+                "UPDATE taxon_i18n SET common_name = ? WHERE taxon_id = ? AND locale = ?", updates));
     }
 
     private void rebuildChildCounts() {
@@ -455,7 +563,7 @@ public class ColDwcaImporter {
                 """,
                 rs -> {
                     batches.add(new Object[] {rs.getInt("cnt"), rs.getLong("pid")});
-                    if (batches.size() >= INSERT_BATCH_SIZE) {
+                    if (batches.size() >= 500) {
                         jdbcTemplate.batchUpdate("UPDATE taxon SET child_count = ? WHERE id = ?", batches);
                         batches.clear();
                     }
@@ -466,12 +574,22 @@ public class ColDwcaImporter {
     }
 
     private void clearTaxonData() {
-        log.info("Clearing existing taxon/media/i18n data before import");
+        log.info("Clearing existing taxon/media/i18n/synonym data before import");
         jdbcTemplate.update("DELETE FROM taxon_media");
         jdbcTemplate.update("DELETE FROM taxon_i18n");
-        // 自引用表：先断开父级再删
+        jdbcTemplate.update("DELETE FROM taxon_synonym");
         jdbcTemplate.update("UPDATE taxon SET parent_id = NULL");
         jdbcTemplate.update("DELETE FROM taxon");
+    }
+
+    private static int phaseOrder(String phase) {
+        return switch (phase) {
+            case PHASE_TAXA -> 1;
+            case PHASE_VERNACULARS -> 2;
+            case PHASE_SYNONYMS -> 3;
+            case PHASE_COUNTS -> 4;
+            default -> 0;
+        };
     }
 
     private static ZipEntry requireEntry(ZipFile zip, String name) {
@@ -497,6 +615,10 @@ public class ColDwcaImporter {
     private record PendingInsert(DwcaTaxonRow row, Long parentDbId, String uniqKey) {
     }
 
-    public record ImportStats(int taxonCount, int vernacularCount, Map<String, Integer> byRank) {
+    private record SynonymCandidate(String synonymExternalId, String acceptedExternalId, String scientificName) {
+    }
+
+    public record ImportStats(
+            int taxonCount, int vernacularCount, int synonymCount, Map<String, Integer> byRank) {
     }
 }

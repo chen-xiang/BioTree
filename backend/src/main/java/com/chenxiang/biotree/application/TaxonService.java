@@ -15,15 +15,18 @@ import com.chenxiang.biotree.api.taxon.TaxonBreadcrumbDto;
 import com.chenxiang.biotree.api.taxon.TaxonDetailDto;
 import com.chenxiang.biotree.api.taxon.TaxonListItemDto;
 import com.chenxiang.biotree.api.taxon.TaxonMediaDto;
+import com.chenxiang.biotree.api.taxon.TaxonSynonymDto;
 import com.chenxiang.biotree.api.taxon.UpdateTaxonRequest;
 import com.chenxiang.biotree.domain.taxon.Taxon;
 import com.chenxiang.biotree.domain.taxon.TaxonI18n;
 import com.chenxiang.biotree.domain.taxon.TaxonMedia;
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import com.chenxiang.biotree.domain.taxon.TaxonRankRules;
+import com.chenxiang.biotree.domain.taxon.TaxonSynonym;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonI18nRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonMediaRepository;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonRepository;
+import com.chenxiang.biotree.infrastructure.persistence.TaxonSynonymRepository;
 import com.chenxiang.biotree.infrastructure.storage.StorageService;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,16 +52,22 @@ public class TaxonService {
     private final TaxonRepository taxonRepository;
     private final TaxonI18nRepository taxonI18nRepository;
     private final TaxonMediaRepository taxonMediaRepository;
+    private final TaxonSynonymRepository taxonSynonymRepository;
+    private final TaxonSearchDao taxonSearchDao;
     private final StorageService storageService;
 
     public TaxonService(
             TaxonRepository taxonRepository,
             TaxonI18nRepository taxonI18nRepository,
             TaxonMediaRepository taxonMediaRepository,
+            TaxonSynonymRepository taxonSynonymRepository,
+            TaxonSearchDao taxonSearchDao,
             StorageService storageService) {
         this.taxonRepository = taxonRepository;
         this.taxonI18nRepository = taxonI18nRepository;
         this.taxonMediaRepository = taxonMediaRepository;
+        this.taxonSynonymRepository = taxonSynonymRepository;
+        this.taxonSearchDao = taxonSearchDao;
         this.storageService = storageService;
     }
 
@@ -85,10 +94,7 @@ public class TaxonService {
         List<String> locales = LocaleSupport.fallbackChain(resolvedLocale);
         PageRequest pageable = pageRequest(page, size);
         String term = q.trim();
-        Page<Taxon> taxa = taxonRepository.searchPrefix(term, locales, pageable);
-        if (taxa.getTotalElements() == 0) {
-            taxa = taxonRepository.searchContains(term, locales, pageable);
-        }
+        Page<Taxon> taxa = taxonSearchDao.search(term, locales, pageable);
         return PageResult.of(
                 toListItems(taxa.getContent(), resolvedLocale),
                 taxa.getTotalElements(),
@@ -105,6 +111,9 @@ public class TaxonService {
         List<TaxonMediaDto> media = taxonMediaRepository.findByTaxonIdOrderBySortOrderAscIdAsc(id).stream()
                 .map(this::toMediaDto)
                 .toList();
+        List<TaxonSynonymDto> synonyms = taxonSynonymRepository.findByTaxonIdOrderByScientificNameAsc(id).stream()
+                .map(s -> new TaxonSynonymDto(s.getId(), s.getScientificName()))
+                .toList();
         return new TaxonDetailDto(
                 taxon.getId(),
                 taxon.getParent() == null ? null : taxon.getParent().getId(),
@@ -117,7 +126,8 @@ public class TaxonService {
                 taxon.getChildCount(),
                 taxon.isAccepted(),
                 breadcrumbs,
-                media);
+                media,
+                synonyms);
     }
 
     @Transactional
@@ -256,6 +266,7 @@ public class TaxonService {
             taxonMediaRepository.delete(media);
         }
         taxonI18nRepository.deleteByTaxonId(id);
+        taxonSynonymRepository.findByTaxonIdOrderByScientificNameAsc(id).forEach(taxonSynonymRepository::delete);
 
         Taxon parent = taxon.getParent();
         taxonRepository.delete(taxon);
