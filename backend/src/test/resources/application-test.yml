@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:biotree;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  storage:
+    type: local
+    local:
+      base-path: ${java.io.tmpdir}/biotree-test-files
