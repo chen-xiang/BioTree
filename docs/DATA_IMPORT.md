@@ -44,13 +44,31 @@ curl -L -o data/import/col_latest_dwca.zip \
 scripts\import-col-full.bat
 ```
 
+**Linux / macOS：**
+
+```bash
+./scripts/import-col-full.sh
+```
+
 脚本会：
 
-1. 若不存在则下载 `data\import\col_latest_dwca.zip`
+1. 若不存在则下载 `data/import/col_latest_dwca.zip`（Windows 路径为 `data\import\...`）
 2. 确认后执行全量导入（`replace=true`，`max-per-rank=0`）
 3. 导入结束自动退出
 
-**命令行（Linux / macOS / Windows Git Bash）：**
+**断点续跑：**
+
+```bat
+scripts\import-col-resume.bat
+```
+
+```bash
+./scripts/import-col-resume.sh
+```
+
+在已有 checkpoint 且 zip 仍在时使用；`replace=false` + `resume=true`，勿与全量 replace 混用。
+
+**命令行（手动 gradlew）：**
 
 ```bash
 cd backend
