@@ -38,3 +38,10 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("importCol") {
+    group = "application"
+    description = "Run Catalogue of Life import without starting the web server"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.chenxiang.biotree.ImportApplication")
+}

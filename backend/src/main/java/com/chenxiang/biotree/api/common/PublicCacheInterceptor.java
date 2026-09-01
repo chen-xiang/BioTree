@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 仅 Web 进程加载
  */
 package com.chenxiang.biotree.api.common;
 
@@ -13,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+@WebOnly
 @Component
 public class PublicCacheInterceptor implements HandlerInterceptor {
 

@@ -8,6 +8,7 @@
  * Updated: 2026-08-31 Session 固定攻击防护与登出清理
  * Updated: 2026-08-31 管理端写操作启用 Cookie CSRF
  * Updated: 2026-08-31 增加 AccessDeniedHandler
+ * Updated: 2026-09-01 仅 Web 进程加载，导入 CLI 不启动 Security 过滤器
  */
 package com.chenxiang.biotree.security;
 
@@ -15,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.chenxiang.biotree.api.common.ApiResponse;
 import com.chenxiang.biotree.api.common.ErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -31,6 +33,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 @EnableWebSecurity
+@ConditionalOnWebApplication
 public class SecurityConfig {
 
     @Bean

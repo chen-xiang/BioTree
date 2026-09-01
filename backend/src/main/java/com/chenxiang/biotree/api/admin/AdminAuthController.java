@@ -3,12 +3,14 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 仅 Web 进程加载
  */
 package com.chenxiang.biotree.api.admin;
 
 import com.chenxiang.biotree.api.common.ApiResponse;
 import com.chenxiang.biotree.api.common.BusinessException;
 import com.chenxiang.biotree.api.common.ErrorCode;
+import com.chenxiang.biotree.api.common.WebOnly;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@WebOnly
 @RestController
 @RequestMapping("/api/admin/auth")
 public class AdminAuthController {

@@ -4,10 +4,12 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加节点移动接口
+ * Updated: 2026-09-01 仅 Web 进程加载
  */
 package com.chenxiang.biotree.api.admin;
 
 import com.chenxiang.biotree.api.common.ApiResponse;
+import com.chenxiang.biotree.api.common.WebOnly;
 import com.chenxiang.biotree.api.taxon.CreateTaxonRequest;
 import com.chenxiang.biotree.api.taxon.MoveTaxonRequest;
 import com.chenxiang.biotree.api.taxon.TaxonDetailDto;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@WebOnly
 @RestController
 @RequestMapping("/api/admin/taxa")
 public class AdminTaxonController {

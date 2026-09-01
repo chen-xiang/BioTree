@@ -2,7 +2,7 @@
 
 本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界分类数据及俗名。
 
-> **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。另可导入 Description / Distribution / Media 扩展与命名学字段（见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)）。
+> **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。另可导入 Description / Distribution / Media 扩展与命名学字段（见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)）。导入入口为独立 `gradle importCol`（非 Web），与 `bootRun` / `start-server-dev` 分离。
 
 ## 1. 数据源
 
@@ -60,7 +60,7 @@ scripts\import-col-full.bat
 
 1. 若不存在则下载 `data/import/col_latest_dwca.zip`（Windows 路径为 `data\import\...`）
 2. 确认后执行全量导入（`replace=true`，`rank-mode=full`，`max-per-rank=0`，并开启俗名/异名/描述/分布/媒体）
-3. 导入结束自动退出
+3. 通过 `gradle importCol` 在**无 Web 端口**的独立进程中导入，结束后退出（可与 `start-server-dev` 同时跑；`replace=true` 期间分类表会被清空）
 
 **断点续跑：**
 
@@ -74,12 +74,11 @@ scripts\import-col-resume.bat
 
 在已有 checkpoint 且 zip 仍在时使用；`replace=false` + `resume=true`，勿与全量 replace 混用。
 
-**命令行（手动 gradlew）：**
+**命令行（手动 gradle importCol，不启动 8080）：**
 
 ```bash
 cd backend
-./gradlew bootRun --args='\
-  --app.import.enabled=true \
+./gradlew importCol --args='\
   --app.import.dwca-path=../data/import/col_latest_dwca.zip \
   --app.import.replace=true \
   --app.import.resume=false \
@@ -92,14 +91,13 @@ cd backend
   --app.import.import-media=true'
 ```
 
-导入进程结束后会自动退出。全量可达百万级节点（完整阶元更多），首次导入耗时取决于磁盘与 MySQL 配置，建议加大 `innodb_buffer_pool_size`。
+`start-server-dev` / `bootRun` 只提供 HTTP API，**不会**导入。导入结束后进程退出。全量可达百万级节点（完整阶元更多），首次导入耗时取决于磁盘与 MySQL 配置，建议加大 `innodb_buffer_pool_size`。
 
 ### 试跑（每级限条数）
 
 ```bash
 cd backend
-./gradlew bootRun --args='\
-  --app.import.enabled=true \
+./gradlew importCol --args='\
   --app.import.dwca-path=../data/import/col_latest_dwca.zip \
   --app.import.replace=true \
   --app.import.max-per-rank=500 \
@@ -137,7 +135,7 @@ cd backend
 
 见 `application.yml` 中 `app.import`：
 
-- `enabled`：是否启动即导入  
+- `enabled`：是否执行导入（仅 `ImportApplication` / `gradle importCol`；Web 进程忽略）  
 - `dwca-path`：zip 路径  
 - `replace`：是否先清空分类数据  
 - `resume`：是否断点续跑  

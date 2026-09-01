@@ -105,7 +105,7 @@ Zip 流式扫描
 
 **依赖**：现有 `import_checkpoint`、批事务。  
 **风险**：父级指向中间等级时的上溯逻辑需回归夹具与小样全量。  
-**明确不做**：本波不引入消息队列/独立 Worker 进程（仍是 `bootRun --app.import.enabled`）。
+**明确不做**：本波不引入消息队列。导入已改为独立 `gradle importCol`（非 Web 进程），与 `bootRun` 服务启动分离。
 
 ---
 

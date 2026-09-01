@@ -5,11 +5,13 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 配图分页接口
  * Updated: 2026-08-31 增加 view 投影参数（R3）
+ * Updated: 2026-09-01 仅 Web 进程加载
  */
 package com.chenxiang.biotree.api.taxon;
 
 import com.chenxiang.biotree.api.common.ApiResponse;
 import com.chenxiang.biotree.api.common.PageResult;
+import com.chenxiang.biotree.api.common.WebOnly;
 import com.chenxiang.biotree.application.AppConstants;
 import com.chenxiang.biotree.application.TaxonService;
 import com.chenxiang.biotree.domain.taxon.TaxonView;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@WebOnly
 @RestController
 @RequestMapping("/api/taxa")
 public class TaxonController {

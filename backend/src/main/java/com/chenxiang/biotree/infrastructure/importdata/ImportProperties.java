@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加断点续跑、异名导入与提交批次配置
+ * Updated: 2026-09-01 enabled 仅对 importCol / ImportApplication 生效
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -14,7 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.import")
 public class ImportProperties {
 
-    /** 是否启用导入（启用后启动即执行并退出）。 */
+    /** 是否执行导入（仅 ImportApplication / gradle importCol；Web 进程忽略）。 */
     private boolean enabled;
 
     /** DwC-A zip 路径。 */

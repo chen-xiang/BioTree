@@ -28,8 +28,8 @@ scripts/    开发 / 导入 / 统计脚本（.bat + .sh）
 
 | 作用 | Linux / macOS | Windows |
 | --- | --- | --- |
-| 启动前端 Vite | `./scripts/web-dev.sh` | `scripts\web-dev.bat` |
-| 启动后端 Spring Boot | `./scripts/server-dev.sh` | `scripts\server-dev.bat` |
+| 启动前端 Vite | `./scripts/start-web-dev.sh` | `scripts\start-web-dev.bat` |
+| 启动后端 Spring Boot | `./scripts/start-server-dev.sh` | `scripts\start-server-dev.bat` |
 | 安装前端依赖 | `./scripts/install-frontend.sh` | `scripts\install-frontend.bat` |
 | 后端测试 | `./scripts/test-backend.sh` | `scripts\test-backend.bat` |
 | 前端检查（typecheck/lint/test/build） | `./scripts/test-frontend.sh` | `scripts\test-frontend.bat` |
@@ -39,7 +39,7 @@ scripts/    开发 / 导入 / 统计脚本（.bat + .sh）
 | CoL 全量导入 | `./scripts/import-col-full.sh` | `scripts\import-col-full.bat` |
 | CoL 断点续跑 | `./scripts/import-col-resume.sh` | `scripts\import-col-resume.bat` |
 
-开发时请开两个终端分别跑 `server-dev` 与 `web-dev`。
+开发时请开两个终端分别跑 `start-server-dev` 与 `start-web-dev`。导入用 `import-col-*`，**不**占用 8080，可与后端服务同时跑。
 ## 已实现能力
 
 - 公开浏览：懒加载分类树、搜索（前缀 / MySQL FULLTEXT）、详情、异名、locale 回退、`/browse/:id`
@@ -86,7 +86,7 @@ pnpm openapi:generate:live     # 需后端已启动
 
 ### CoL 导入（摘要）
 
-见 [docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)。全量前请确认 JVM 堆与 `app.import.*`；中断后续跑请使用 `resume=true` 且勿再次 `replace=true`。
+见 [docs/DATA_IMPORT.md](docs/DATA_IMPORT.md)。使用 `scripts/import-col-full.*` 或 `cd backend && ./gradlew importCol --args='...'`，不要用 `bootRun` 导入。全量前请确认 JVM 堆与 `app.import.*`；中断后续跑请使用 `resume=true` 且勿再次 `replace=true`。
 
 ## 生产注意
 

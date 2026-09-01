@@ -3,7 +3,8 @@
 # BioTree - 启动前端开发服务器（Vite）
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/web-dev.sh
+# Updated: 2026-09-01 脚本改名为 start-web-dev
+# 用法：./scripts/start-web-dev.sh
 # 前置：Node.js 20+、pnpm
 # =============================================================================
 set -euo pipefail
@@ -12,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND="$ROOT/frontend"
 
 echo
-echo "[BioTree] web-dev"
+echo "[BioTree] start-web-dev"
 echo "Root    : $ROOT"
 echo "Frontend: $FRONTEND"
 echo

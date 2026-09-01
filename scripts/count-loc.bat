@@ -5,10 +5,12 @@ rem ============================================================================
 rem BioTree - 代码行统计（源码，不含依赖与构建产物）
 rem Author: chen-xiang
 rem Created: 2026-08-31
+rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
 rem 用法：scripts\count-loc.bat
 rem 说明：优先使用 cloc；若无则用 PowerShell 按扩展名粗算
 rem =============================================================================
 
+set "EXITCODE=0"
 cd /d "%~dp0.."
 set "ROOT=%CD%"
 
@@ -21,7 +23,8 @@ where cloc >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
   echo [INFO] Using cloc...
   cloc "%ROOT%\backend\src" "%ROOT%\frontend\src" "%ROOT%\docs" "%ROOT%\scripts" --quiet
-  exit /b %ERRORLEVEL%
+  set "EXITCODE=%ERRORLEVEL%"
+  goto :finish
 )
 
 echo [INFO] cloc not found, using PowerShell fallback...
@@ -70,4 +73,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "('TOTAL'.PadRight(14) + ([string]$totalFiles).PadLeft(8) + ([string]$totalLines).PadLeft(12));" ^
   "Write-Host ''; Write-Host '[HINT] Install cloc for more accurate counts: https://github.com/AlDanial/cloc'"
 
-exit /b %ERRORLEVEL%
+set "EXITCODE=%ERRORLEVEL%"
+
+:finish
+call "%~dp0finish.bat" %EXITCODE%
+exit /b %EXITCODE%

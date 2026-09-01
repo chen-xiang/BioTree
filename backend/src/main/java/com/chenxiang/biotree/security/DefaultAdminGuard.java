@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 仅 Web 进程检查默认管理员口令
  */
 package com.chenxiang.biotree.security;
 
@@ -13,12 +14,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
 @Order(1)
+@ConditionalOnWebApplication
 public class DefaultAdminGuard implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultAdminGuard.class);

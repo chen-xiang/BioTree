@@ -4,6 +4,7 @@
 # Author: chen-xiang
 # Created: 2026-08-31
 # Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
+# Updated: 2026-09-01 改为 gradle importCol，不启动 Web
 # 用法：./scripts/import-col-full.sh
 # 前置：JDK 21、MySQL（库 biotree）、网络（若需下载数据包）
 # =============================================================================
@@ -62,8 +63,9 @@ fi
 cd "$BACKEND"
 chmod +x ./gradlew 2>/dev/null || true
 echo
-echo "[INFO] Starting import (rank-mode=full, max-per-rank=0, replace=true)..."
-./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=true --app.import.resume=false --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"
+echo "[INFO] Starting import via gradle importCol (no web port, rank-mode=full, replace=true)..."
+echo "       Web server can keep running; replace=true will empty taxon tables while importing."
+./gradlew importCol --args="--app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=true --app.import.resume=false --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"
 EXITCODE=$?
 
 echo

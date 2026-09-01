@@ -180,7 +180,7 @@ BioTree/
 | Docker | 不做 |
 | Nginx | 不做 |
 
-本地开发：本机（或已有）MySQL + `./gradlew bootRun` + `pnpm/npm run dev`。
+本地开发：本机（或已有）MySQL + `./gradlew bootRun` + `pnpm/npm run dev`。导入：`./gradlew importCol`（非 Web）。
 
 ---
 

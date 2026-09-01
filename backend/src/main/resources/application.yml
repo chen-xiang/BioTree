@@ -63,6 +63,7 @@ app:
       secret-key:
       public-base-url:
   import:
+    # 仅 gradle importCol / ImportApplication 读取；start-server-dev 忽略
     enabled: false
     dwca-path: ../data/import/col_latest_dwca.zip
     replace: false

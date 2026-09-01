@@ -1,2 +1,6 @@
+# 前端 pnpm 策略：允许 Vite 依赖 esbuild 执行安装期原生构建。
+# Author: chen-xiang
+# Created: 2026-09-01
+# Updated: 2026-09-01 批准 esbuild 构建脚本，修复 web-dev 安装失败
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true

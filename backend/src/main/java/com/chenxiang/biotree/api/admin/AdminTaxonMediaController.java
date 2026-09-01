@@ -4,10 +4,12 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 支持更新图注与排序
+ * Updated: 2026-09-01 仅 Web 进程加载
  */
 package com.chenxiang.biotree.api.admin;
 
 import com.chenxiang.biotree.api.common.ApiResponse;
+import com.chenxiang.biotree.api.common.WebOnly;
 import com.chenxiang.biotree.api.taxon.TaxonMediaDto;
 import com.chenxiang.biotree.application.TaxonMediaService;
 import org.springframework.http.MediaType;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+@WebOnly
 @RestController
 @RequestMapping("/api/admin/taxa/{taxonId}/media")
 public class AdminTaxonMediaController {

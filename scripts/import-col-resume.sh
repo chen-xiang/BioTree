@@ -4,6 +4,7 @@
 # Author: chen-xiang
 # Created: 2026-08-31
 # Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
+# Updated: 2026-09-01 改为 gradle importCol，不启动 Web
 # 用法：./scripts/import-col-resume.sh
 # 前置：已有 checkpoint；DwC-A 包存在；勿与 replace=true 混用
 # =============================================================================
@@ -33,5 +34,5 @@ fi
 
 cd "$BACKEND"
 chmod +x ./gradlew 2>/dev/null || true
-echo "[INFO] Starting resume import (replace=false, resume=true, rank-mode=full)..."
-exec ./gradlew bootRun --args="--app.import.enabled=true --app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=false --app.import.resume=true --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"
+echo "[INFO] Starting resume import via gradle importCol (no web port, replace=false)..."
+exec ./gradlew importCol --args="--app.import.dwca-path=../data/import/col_latest_dwca.zip --app.import.replace=false --app.import.resume=true --app.import.max-per-rank=0 --app.import.rank-mode=full --app.import.import-vernaculars=true --app.import.import-synonyms=true --app.import.import-descriptions=true --app.import.import-distributions=true --app.import.import-media=true"
