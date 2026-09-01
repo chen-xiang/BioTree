@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 遮罩改为冷灰墨色
  */
 <script setup lang="ts">
 import BtButton from './BtButton.vue'
@@ -43,7 +44,7 @@ const emit = defineEmits<{
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: rgb(10 20 16 / 0.45);
+  background: rgb(14 19 23 / 0.48);
   display: grid;
   place-items: center;
   padding: var(--space-4);

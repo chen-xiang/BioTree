@@ -7,8 +7,10 @@
  * Updated: 2026-08-31 详情区展示配图画廊
  * Updated: 2026-08-31 搜索防抖、AbortController、/browse/:id、分页
  * Updated: 2026-08-31 移动端树/详情切换与配图加载更多
+ * Updated: 2026-09-01 搜索改为下拉、详情改为标本卡、工作台分栏
+ * Updated: 2026-09-01 浏览工作台单栏滚动，树滚动根提供给续页观察
  */
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
@@ -20,6 +22,8 @@ import {
   type TaxonListItem,
   type TaxonMedia,
 } from '@/api/taxon'
+import { TAXON_TREE_SCROLL_ROOT } from '@/composables/useTaxonChildren'
+import RankSpine from '@/components/taxon/RankSpine.vue'
 import TaxonTreeNode from '@/components/taxon/TaxonTreeNode.vue'
 import BtButton from '@/components/ui/BtButton.vue'
 import BtInput from '@/components/ui/BtInput.vue'
@@ -59,6 +63,10 @@ const mediaTotal = ref(0)
 const loadingMoreMedia = ref(false)
 const mobilePane = ref<'tree' | 'detail'>('tree')
 const crumbsExpanded = ref(false)
+const searchOpen = ref(false)
+const searchRoot = ref<HTMLElement | null>(null)
+const treeScroll = ref<HTMLElement | null>(null)
+provide(TAXON_TREE_SCROLL_ROOT, treeScroll)
 
 const apiLocale = computed(() => localeStore.locale)
 const treeView = computed(() => taxonViewStore.view)
@@ -167,11 +175,13 @@ async function runSearch(page = 0) {
     searchHits.value = []
     searchTotal.value = 0
     searchPage.value = 0
+    searchOpen.value = false
     return
   }
   searchAbort?.abort()
   searchAbort = new AbortController()
   searching.value = true
+  searchOpen.value = true
   try {
     const result = await searchTaxa(q, apiLocale.value, page, SEARCH_SIZE, searchAbort.signal)
     searchHits.value = result.items
@@ -190,10 +200,39 @@ const debouncedSearch = debounce(() => {
 }, 320)
 
 function onSearchSubmit() {
+  searchOpen.value = true
   void runSearch(0)
 }
 
+function onSelectHit(id: number) {
+  searchOpen.value = false
+  void loadDetail(id)
+}
+
+function clearSearch() {
+  query.value = ''
+  searchHits.value = []
+  searchTotal.value = 0
+  searchPage.value = 0
+  searchOpen.value = false
+}
+
+function reopenSearch() {
+  if (searchHits.value.length || searching.value) {
+    searchOpen.value = true
+  }
+}
+
+function onDocPointerDown(event: PointerEvent) {
+  if (!searchOpen.value) return
+  const root = searchRoot.value
+  if (root && event.target instanceof Node && !root.contains(event.target)) {
+    searchOpen.value = false
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener('pointerdown', onDocPointerDown)
   await loadRoots()
   const routeId = props.id ? Number(props.id) : NaN
   if (Number.isFinite(routeId)) {
@@ -238,6 +277,7 @@ watch(query, () => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown)
   detailAbort?.abort()
   searchAbort?.abort()
 })
@@ -267,9 +307,37 @@ onBeforeUnmount(() => {
             {{ t('browse.viewFull') }}
           </button>
         </div>
-        <form class="search" @submit.prevent="onSearchSubmit">
+        <form ref="searchRoot" class="search" @submit.prevent="onSearchSubmit" @focusin="reopenSearch">
           <BtInput v-model="query" :placeholder="t('browse.searchPlaceholder')" />
-          <BtButton type="submit">{{ t('browse.search') }}</BtButton>
+          <div class="search-actions">
+            <BtButton v-if="query" variant="ghost" type="button" @click="clearSearch">
+              {{ t('browse.clearSearch') }}
+            </BtButton>
+            <BtButton type="submit">{{ t('browse.search') }}</BtButton>
+          </div>
+          <div v-if="searchOpen && (searchHits.length || searching)" class="hits" role="listbox">
+            <p class="hits-label">{{ t('browse.searchResults') }}</p>
+            <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
+            <BtVirtualList
+              v-if="searchHits.length"
+              :items="searchHits"
+              :item-height="56"
+              :height="Math.min(280, Math.max(112, searchHits.length * 56))"
+            >
+              <template #default="{ item }">
+                <button type="button" class="hit" @click="onSelectHit(item.id)">
+                  <strong>{{ item.scientificName }}</strong>
+                  <span>{{ item.commonName || rankLabel(item.rank) }}</span>
+                </button>
+              </template>
+            </BtVirtualList>
+            <BtPagination
+              :page="searchPage"
+              :size="SEARCH_SIZE"
+              :total="searchTotal"
+              @update:page="runSearch"
+            />
+          </div>
         </form>
       </div>
     </header>
@@ -297,32 +365,12 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-if="searchHits.length || searching" class="hits">
-      <h2>{{ t('browse.searchResults') }}</h2>
-      <p v-if="searching" class="muted">{{ t('common.loading') }}</p>
-      <BtVirtualList
-        v-if="searchHits.length"
-        :items="searchHits"
-        :item-height="56"
-        :height="Math.min(320, Math.max(120, searchHits.length * 56))"
-      >
-        <template #default="{ item }">
-          <button type="button" class="hit" @click="loadDetail(item.id)">
-            <strong>{{ item.scientificName }}</strong>
-            <span>{{ item.commonName || rankLabel(item.rank) }}</span>
-          </button>
-        </template>
-      </BtVirtualList>
-      <BtPagination
-        :page="searchPage"
-        :size="SEARCH_SIZE"
-        :total="searchTotal"
-        @update:page="runSearch"
-      />
-    </div>
-
     <div class="split" :data-pane="mobilePane">
-      <aside class="tree panel" :class="{ 'pane-hidden-mobile': mobilePane !== 'tree' }">
+      <aside
+        ref="treeScroll"
+        class="tree panel bt-scroll"
+        :class="{ 'pane-hidden-mobile': mobilePane !== 'tree' }"
+      >
         <h2>{{ t('browse.tree') }}</h2>
         <p v-if="loadingRoots" class="muted">{{ t('common.loading') }}</p>
         <TaxonTreeNode
@@ -337,37 +385,37 @@ onBeforeUnmount(() => {
         />
       </aside>
 
-      <article class="detail panel" :class="{ 'pane-hidden-mobile': mobilePane !== 'detail' }">
+      <article
+        class="detail panel bt-scroll"
+        :class="{ 'pane-hidden-mobile': mobilePane !== 'detail' }"
+      >
         <p v-if="loadingDetail" class="muted">{{ t('common.loading') }}</p>
         <template v-else-if="detail">
-          <nav class="crumbs">
-            <RouterLink
-              v-for="crumb in crumbHead"
-              :key="`h-${crumb.id}`"
-              :to="{ name: 'browse', params: { id: String(crumb.id) } }"
-            >
-              {{ crumb.commonName || crumb.scientificName }}
-            </RouterLink>
-            <button
-              v-if="crumbsCollapsed"
-              type="button"
-              class="crumb-more"
-              @click="crumbsExpanded = true"
-            >
-              …
-            </button>
-            <RouterLink
-              v-for="crumb in crumbTail"
-              :key="`t-${crumb.id}`"
-              :to="{ name: 'browse', params: { id: String(crumb.id) } }"
-            >
-              {{ crumb.commonName || crumb.scientificName }}
-            </RouterLink>
+          <nav class="crumbs" :aria-label="t('browse.title')">
+            <template v-for="(crumb, index) in crumbHead" :key="`h-${crumb.id}`">
+              <span v-if="index > 0" class="sep" aria-hidden="true">›</span>
+              <RouterLink :to="{ name: 'browse', params: { id: String(crumb.id) } }">
+                {{ crumb.commonName || crumb.scientificName }}
+              </RouterLink>
+            </template>
+            <template v-if="crumbsCollapsed">
+              <span class="sep" aria-hidden="true">›</span>
+              <button type="button" class="crumb-more" @click="crumbsExpanded = true">…</button>
+            </template>
+            <template v-for="crumb in crumbTail" :key="`t-${crumb.id}`">
+              <span class="sep" aria-hidden="true">›</span>
+              <RouterLink :to="{ name: 'browse', params: { id: String(crumb.id) } }">
+                {{ crumb.commonName || crumb.scientificName }}
+              </RouterLink>
+            </template>
           </nav>
-          <h2 class="sci">{{ detail.scientificName }}</h2>
-          <p v-if="authorshipLine" class="authorship">{{ authorshipLine }}</p>
-          <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
-          <p class="meta">{{ rankLabel(detail.rank) }} · {{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
+          <header class="plate">
+            <p class="stamp">{{ rankLabel(detail.rank) }}</p>
+            <h2 class="sci">{{ detail.scientificName }}</h2>
+            <p v-if="authorshipLine" class="authorship">{{ authorshipLine }}</p>
+            <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
+            <p class="meta">{{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
+          </header>
           <p v-if="namePublishedIn" class="muted pub">{{ t('browse.publishedIn') }}: {{ namePublishedIn }}</p>
           <p v-if="nomenclaturalMeta" class="muted">{{ nomenclaturalMeta }}</p>
           <p v-if="detail.summary" class="summary">{{ detail.summary }}</p>
@@ -399,11 +447,13 @@ onBeforeUnmount(() => {
               </li>
             </ul>
           </div>
-          <div v-if="gallery.length" class="gallery">
-            <figure v-for="m in gallery" :key="m.id">
-              <img :src="m.url" :alt="m.caption || detail.scientificName" loading="lazy" />
-              <figcaption v-if="m.caption">{{ m.caption }}</figcaption>
-            </figure>
+          <div v-if="gallery.length" class="gallery-wrap">
+            <div class="gallery">
+              <figure v-for="m in gallery" :key="m.id">
+                <img :src="m.url" :alt="m.caption || detail.scientificName" loading="lazy" />
+                <figcaption v-if="m.caption">{{ m.caption }}</figcaption>
+              </figure>
+            </div>
             <div v-if="hasMoreMedia" class="gallery-more">
               <BtButton variant="ghost" :disabled="loadingMoreMedia" @click="loadMoreMedia">
                 {{ t('browse.loadMoreMedia') }}
@@ -411,7 +461,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </template>
-        <p v-else class="muted">{{ t('browse.selectHint') }}</p>
+        <div v-else class="empty">
+          <RankSpine compact :caption="t('home.spineCaption')" />
+          <p>{{ t('browse.selectHint') }}</p>
+        </div>
       </article>
     </div>
   </section>
@@ -419,9 +472,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .browse {
-  animation: rise var(--duration-normal) var(--ease-out);
-  display: grid;
-  gap: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
 }
 
 .head {
@@ -455,19 +510,14 @@ onBeforeUnmount(() => {
 
 .view-toggle button.active {
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-text) 8%, var(--color-bg-elevated));
-}
-
-.authorship {
-  margin: 0 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-elevated));
 }
 
 h1 {
   margin: 0 0 var(--space-2);
   font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 650;
 }
 
 .head p {
@@ -476,19 +526,84 @@ h1 {
 }
 
 .search {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
   align-items: center;
 }
 
 .search :deep(.bt-input) {
-  min-width: min(20rem, 70vw);
+  min-width: min(18rem, 100%);
+}
+
+.search-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.hits {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 8;
+  width: min(28rem, 86vw);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.hits-label {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.hit {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.hit:hover,
+.hit:focus-visible {
+  background: var(--color-bg-muted);
+}
+
+.hit strong {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.hit span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .split {
   display: grid;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(280px, 1.2fr);
+  grid-template-columns: minmax(240px, 0.85fr) minmax(280px, 1.25fr);
   gap: var(--space-4);
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
 
 .panel {
@@ -497,29 +612,51 @@ h1 {
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
-  min-height: 22rem;
+  min-height: 0;
 }
 
-.tree {
-  max-height: min(70vh, 40rem);
-  overflow: auto;
-}
-
-.tree h2,
-.detail h2,
-.hits h2 {
+.tree h2 {
   margin: 0 0 var(--space-3);
-  font-size: var(--text-md);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.plate {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stamp {
+  display: inline-block;
+  margin: 0 0 var(--space-3);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .sci {
-  margin: 0 0 var(--space-2) !important;
+  margin: 0 0 var(--space-2);
   font-family: var(--font-display);
-  font-size: var(--text-2xl) !important;
-  color: var(--color-text) !important;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  color: var(--color-text);
   font-style: italic;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.authorship {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .common {
@@ -533,9 +670,13 @@ h1 {
   color: var(--color-text-muted);
 }
 
+.summary {
+  margin: var(--space-3) 0 0;
+}
+
 .desc {
   margin-top: var(--space-4);
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 .desc.markdown :deep(p) {
@@ -547,16 +688,22 @@ h1 {
   padding-left: 1.2rem;
 }
 
-.synonyms {
-  margin-top: var(--space-4);
+.synonyms,
+.vernaculars,
+.distributions {
+  margin-top: var(--space-5);
 }
 
 .synonyms h3,
 .vernaculars h3,
 .distributions h3 {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-weight: 500;
 }
 
 .synonyms ul,
@@ -568,11 +715,6 @@ h1 {
 
 .synonyms em {
   font-style: italic;
-}
-
-.vernaculars,
-.distributions {
-  margin-top: var(--space-4);
 }
 
 .vernaculars .locale {
@@ -595,8 +737,11 @@ h1 {
   font-size: var(--text-sm);
 }
 
-.gallery {
+.gallery-wrap {
   margin-top: var(--space-5);
+}
+
+.gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-3);
@@ -608,7 +753,6 @@ h1 {
   overflow: hidden;
   border: 1px solid var(--color-border);
   background: var(--color-bg);
-  animation: rise var(--duration-normal) var(--ease-out);
 }
 
 .gallery img {
@@ -624,10 +768,15 @@ h1 {
   color: var(--color-text-muted);
 }
 
+.gallery-more {
+  margin-top: var(--space-3);
+}
+
 .crumbs {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 0.35rem 0.45rem;
   margin-bottom: var(--space-4);
   font-size: var(--text-sm);
 }
@@ -636,42 +785,29 @@ h1 {
   color: var(--color-primary);
 }
 
-.crumbs a::after {
-  content: '/';
-  margin-left: var(--space-2);
+.sep,
+.crumb-more {
   color: var(--color-text-muted);
-}
-
-.crumbs a:last-child::after {
-  content: '';
 }
 
 .crumb-more {
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
   cursor: pointer;
   padding: 0 var(--space-1);
 }
 
-.hits {
+.empty {
   display: grid;
-  gap: var(--space-2);
+  justify-items: start;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
 }
 
-.hit {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  width: 100%;
-  height: 100%;
-  padding: 0.55rem 0.9rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
+.empty p {
+  margin: 0;
+  max-width: 22rem;
 }
 
 .error {
@@ -683,6 +819,28 @@ h1 {
 }
 
 @media (max-width: 860px) {
+  .head-actions {
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .search,
+  .view-toggle {
+    width: 100%;
+  }
+
+  .search {
+    grid-template-columns: 1fr;
+  }
+
+  .search :deep(.bt-input) {
+    min-width: 0;
+  }
+
+  .search-actions {
+    justify-content: flex-end;
+  }
+
   .mobile-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -700,26 +858,22 @@ h1 {
 
   .mobile-tabs button.active {
     color: var(--color-text);
-    border-color: color-mix(in srgb, var(--color-text) 35%, var(--color-border));
+    background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-elevated));
+    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  }
+
+  .browse {
+    flex: none;
+    height: auto;
   }
 
   .split {
     grid-template-columns: 1fr;
+    flex: none;
   }
 
   .pane-hidden-mobile {
     display: none;
-  }
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 </style>

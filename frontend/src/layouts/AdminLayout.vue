@@ -6,10 +6,11 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加分类管理侧栏入口
  * Updated: 2026-08-31 展示当前用户并支持登出
+ * Updated: 2026-09-01 侧栏改为工作轨：当前页高亮、登出贴底
  */
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { fetchMe, logout } from '@/api/auth'
 import AppTopbar from '@/components/layout/AppTopbar.vue'
 import BtButton from '@/components/ui/BtButton.vue'
@@ -21,6 +22,7 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const toast = useToastStore()
 const router = useRouter()
+const route = useRoute()
 const busy = ref(false)
 
 onMounted(async () => {
@@ -51,10 +53,16 @@ async function onLogout() {
     <AppTopbar />
     <div class="shell">
       <aside class="side">
-        <p class="side-title">{{ t('admin.title') }}</p>
+        <p class="side-title">{{ t('admin.navWorkbench') }}</p>
         <p v-if="auth.username" class="user">{{ auth.username }}</p>
-        <RouterLink class="side-link" to="/admin">{{ t('nav.admin') }}</RouterLink>
-        <RouterLink class="side-link" to="/admin/taxa">{{ t('admin.taxaNav') }}</RouterLink>
+        <nav class="side-nav">
+          <RouterLink class="side-link" :class="{ active: route.name === 'admin-home' }" to="/admin">
+            {{ t('admin.navOverview') }}
+          </RouterLink>
+          <RouterLink class="side-link" :class="{ active: route.name === 'admin-taxa' }" to="/admin/taxa">
+            {{ t('admin.taxaNav') }}
+          </RouterLink>
+        </nav>
         <BtButton class="logout" variant="ghost" :disabled="busy" @click="onLogout">
           {{ t('admin.logout') }}
         </BtButton>
@@ -73,11 +81,13 @@ async function onLogout() {
 
 .shell {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: calc(100vh - 4.5rem);
+  grid-template-columns: 13.5rem 1fr;
+  min-height: calc(100vh - 3.6rem);
 }
 
 .side {
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   padding: var(--space-5);
@@ -85,30 +95,45 @@ async function onLogout() {
 
 .side-title {
   margin: 0 0 var(--space-2);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .user {
   margin: 0 0 var(--space-4);
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-size: var(--text-sm);
+}
+
+.side-nav {
+  display: grid;
+  gap: var(--space-1);
 }
 
 .side-link {
   display: block;
-  margin-bottom: var(--space-2);
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
-  transition: color var(--duration-fast) var(--ease-out);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
-.side-link.router-link-active,
+.side-link.active,
 .side-link:hover {
   color: var(--color-text);
 }
 
+.side-link.active {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
 .logout {
-  margin-top: var(--space-4);
+  margin-top: auto;
   width: 100%;
 }
 

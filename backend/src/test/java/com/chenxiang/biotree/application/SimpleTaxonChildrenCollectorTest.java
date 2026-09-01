@@ -3,11 +3,14 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 补充同层阶元优先排序
  */
 package com.chenxiang.biotree.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.chenxiang.biotree.domain.taxon.Taxon;
@@ -17,8 +20,12 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 class SimpleTaxonChildrenCollectorTest {
@@ -65,6 +72,38 @@ class SimpleTaxonChildrenCollectorTest {
                 .thenReturn(List.of(subfamily), List.of(genus));
 
         assertTrue(collector.hasVisibleSimpleChildren(1L));
+    }
+
+    @Test
+    void collectPageOrdersByRankThenName() {
+        when(taxonRepository.findBySimpleParentIdAndRankIn(
+                        eq(1L), eq(TaxonRank.LINNAEAN_SEVEN), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        collector.collectPage(1L, PageRequest.of(0, 20));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taxonRepository)
+                .findBySimpleParentIdAndRankIn(eq(1L), eq(TaxonRank.LINNAEAN_SEVEN), captor.capture());
+        assertEquals(TaxonSiblingSort.PAGE_SORT, captor.getValue().getSort());
+    }
+
+    @Test
+    void bfsOrdersHigherRanksBeforeSkippedLowerRanks() {
+        Taxon kingdom = taxon(1L, "Plantae", TaxonRank.KINGDOM, null);
+        Taxon genus = taxon(2L, "Aequitriradites", TaxonRank.GENUS, kingdom);
+        Taxon phylum = taxon(3L, "Anthocerotophyta", TaxonRank.PHYLUM, kingdom);
+        Taxon family = taxon(4L, "Appianaceae", TaxonRank.FAMILY, kingdom);
+
+        when(taxonRepository.countBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN))
+                .thenReturn(0L);
+        when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(1L)))
+                .thenReturn(List.of(genus, family, phylum));
+
+        List<Taxon> visible = collector.collect(1L);
+        assertEquals(
+                List.of("Anthocerotophyta", "Appianaceae", "Aequitriradites"),
+                visible.stream().map(Taxon::getScientificName).toList());
     }
 
     private static Taxon taxon(Long id, String name, TaxonRank rank, Taxon parent) {

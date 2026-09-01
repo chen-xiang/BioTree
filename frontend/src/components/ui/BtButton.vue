@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 去掉悬浮位移，改用颜色过渡
  */
 <script setup lang="ts">
 /**
@@ -42,18 +43,14 @@ withDefaults(
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease-out),
+  transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .bt-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.bt-btn:active:not(:disabled) {
-  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .bt-btn:disabled {

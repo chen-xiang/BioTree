@@ -6,6 +6,8 @@
  * Updated: 2026-08-31 补充浏览与管理分类文案
  * Updated: 2026-08-31 补充配图管理文案
  * Updated: 2026-08-31 补充加载更多与节点移动文案
+ * Updated: 2026-09-01 首页与浏览工作台文案对齐标本台账
+ * Updated: 2026-09-01 分类树触底续页文案
  */
 export default {
   common: {
@@ -23,11 +25,12 @@ export default {
     login: '登录',
   },
   home: {
-    headline: '探索生命的层级',
-    subtitle: '按界门纲目科属种浏览、检索与管理分类单元。',
-    ctaBrowse: '开始浏览',
-    ctaAdmin: '进入管理',
-    statsLine: '当前库中已有 {n} 个分类单元',
+    headline: '从界走到种',
+    subtitle: '按阶元展开 Catalogue of Life，检索学名与俗名，阅读介绍与配图。',
+    ctaBrowse: '打开分类树',
+    ctaAdmin: '管理员入口',
+    statsLine: '个分类单元在库',
+    spineCaption: '林奈七级',
   },
   browse: {
     title: '分类浏览',
@@ -36,9 +39,11 @@ export default {
     search: '搜索',
     searchPlaceholder: '输入学名或俗名',
     searchResults: '搜索结果',
-    selectHint: '从左侧选择一个分类单元查看详情。',
+    selectHint: '在左侧点开一个阶元，右侧会展开它的标本卡。',
+    clearSearch: '清除',
     childrenCount: '{n} 个子节点',
     loadMore: '加载更多',
+    loadingMore: '继续载入子阶元…',
     loadMoreMedia: '加载更多配图',
     synonyms: '异名',
     detailTab: '详情',
@@ -62,7 +67,10 @@ export default {
     title: '管理后台',
     placeholder: '从侧栏进入分类管理，维护节点与多语言介绍。',
     homeSubtitle: '查看库内规模、导入进度，并快速进入分类维护。',
+    navWorkbench: '工作台',
+    navOverview: '概览',
     taxaNav: '分类管理',
+    statByRank: '按阶元',
     taxaTitle: '分类管理',
     taxaSubtitle: '搜索定位节点；按父节点维护子分类；支持移动与配图。',
     previewSimple: '七级预览',

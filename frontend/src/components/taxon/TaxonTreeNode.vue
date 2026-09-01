@@ -1,19 +1,23 @@
 /**
- * 懒加载分类树节点行（支持子节点分页与虚拟滚动）。
+ * 懒加载分类树节点行：展开拉子节点，触底自动续页。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 子节点分页与加载更多
  * Updated: 2026-08-31 子节点较多时使用虚拟列表
  * Updated: 2026-08-31 支持 view=simple|full
+ * Updated: 2026-09-01 选中态左边线与子级分支轨
+ * Updated: 2026-09-01 去掉树内嵌套虚拟列表与「加载更多」，改为触底续页
+ * Updated: 2026-09-01 选中/悬停背景随层级缩进，不再铺满整行
+ * Updated: 2026-09-01 高亮限制在父级竖线内侧
+ * Updated: 2026-09-01 收紧展开箭头两侧空隙
+ * Updated: 2026-09-01 节点行之间增加细间距
  */
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TaxonListItem, TaxonView } from '@/api/taxon'
-import { fetchChildren } from '@/api/taxon'
-import BtButton from '@/components/ui/BtButton.vue'
-import BtVirtualList from '@/components/ui/BtVirtualList.vue'
+import { TAXON_TREE_SCROLL_ROOT, useTaxonChildren } from '@/composables/useTaxonChildren'
 import { rankLabel } from '@/utils/apiError'
 
 const props = defineProps<{
@@ -29,35 +33,26 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const PAGE_SIZE = 40
-const VIRTUAL_THRESHOLD = 40
-
+const scrollRoot = inject<Ref<HTMLElement | null>>(TAXON_TREE_SCROLL_ROOT, ref(null))
 const expanded = ref(false)
-const loading = ref(false)
-const loadingMore = ref(false)
-const children = ref<TaxonListItem[]>([])
-const page = ref(0)
-const total = ref(0)
-const loaded = ref(false)
+const sentinel = ref<HTMLElement | null>(null)
+const activeView = () => props.view ?? 'simple'
 
-const hasMore = computed(() => children.value.length < total.value)
-const useVirtual = computed(() => children.value.length >= VIRTUAL_THRESHOLD)
-const activeView = computed(() => props.view ?? 'simple')
+const {
+  children,
+  hasMore,
+  loading,
+  loadingMore,
+  loadFirstPage,
+  loadMore,
+  reset,
+} = useTaxonChildren({
+  parentId: () => props.node.id,
+  locale: () => props.locale,
+  view: activeView,
+})
 
-async function loadPage(nextPage: number, append: boolean) {
-  const result = await fetchChildren(
-    props.node.id,
-    props.locale,
-    nextPage,
-    PAGE_SIZE,
-    undefined,
-    activeView.value,
-  )
-  total.value = result.total
-  page.value = result.page
-  children.value = append ? [...children.value, ...result.items] : result.items
-  loaded.value = true
-}
+let observer: IntersectionObserver | null = null
 
 async function toggle() {
   if (!props.node.hasChildren) {
@@ -65,39 +60,81 @@ async function toggle() {
     return
   }
   expanded.value = !expanded.value
-  if (expanded.value && !loaded.value) {
-    loading.value = true
-    try {
-      await loadPage(0, false)
-    } finally {
-      loading.value = false
-    }
+  if (expanded.value) {
+    await loadFirstPage()
+    await nextTick()
+    observeSentinel()
+    await continueIfSentinelVisible()
   }
   emit('select', props.node.id)
 }
 
-async function loadMore() {
-  if (!hasMore.value || loadingMore.value) return
-  loadingMore.value = true
-  try {
-    await loadPage(page.value + 1, true)
-  } finally {
-    loadingMore.value = false
+function observeSentinel() {
+  observer?.disconnect()
+  observer = null
+  const target = sentinel.value
+  if (!target || !expanded.value || !hasMore.value) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void continueIfSentinelVisible()
+      }
+    },
+    {
+      root: scrollRoot.value,
+      rootMargin: '120px 0px',
+      threshold: 0,
+    },
+  )
+  observer.observe(target)
+}
+
+async function continueIfSentinelVisible() {
+  if (!expanded.value || !hasMore.value) return
+  const root = scrollRoot.value
+  const target = sentinel.value
+  if (!target) return
+  const visible = isNearScrollRoot(target, root)
+  if (!visible) return
+  const added = await loadMore()
+  if (added > 0) {
+    await nextTick()
+    observeSentinel()
+    await continueIfSentinelVisible()
   }
+}
+
+function isNearScrollRoot(target: HTMLElement, root: HTMLElement | null) {
+  const targetBox = target.getBoundingClientRect()
+  if (root) {
+    const rootBox = root.getBoundingClientRect()
+    return targetBox.top <= rootBox.bottom + 120
+  }
+  return targetBox.top <= window.innerHeight + 120
 }
 
 function resetChildrenCache() {
-  loaded.value = false
-  children.value = []
-  page.value = 0
-  total.value = 0
-  if (expanded.value) {
-    expanded.value = false
-  }
+  observer?.disconnect()
+  observer = null
+  reset()
+  expanded.value = false
 }
 
 watch(() => props.locale, resetChildrenCache)
-watch(activeView, resetChildrenCache)
+watch(() => props.view, resetChildrenCache)
+watch(hasMore, async (more) => {
+  if (!more) {
+    observer?.disconnect()
+    observer = null
+    return
+  }
+  await nextTick()
+  observeSentinel()
+})
+
+onBeforeUnmount(() => {
+  observer?.disconnect()
+})
 </script>
 
 <template>
@@ -105,7 +142,6 @@ watch(activeView, resetChildrenCache)
     <button
       class="row"
       :class="{ active: selectedId === node.id }"
-      :style="{ paddingLeft: `${0.75 + depth * 0.9}rem` }"
       type="button"
       @click="toggle"
     >
@@ -116,69 +152,74 @@ watch(activeView, resetChildrenCache)
       </span>
       <span class="rank">{{ rankLabel(node.rank) }}</span>
     </button>
-    <p v-if="loading" class="hint">…</p>
+    <p v-if="loading" class="hint">{{ t('common.loading') }}</p>
     <div v-if="expanded" class="kids">
-      <BtVirtualList
-        v-if="useVirtual"
-        :items="children"
-        :item-height="48"
-        :height="Math.min(360, children.length * 48)"
-      >
-        <template #default="{ item }">
-          <TaxonTreeNode
-            :node="item"
-            :depth="depth + 1"
-            :locale="locale"
-            :view="activeView"
-            :selected-id="selectedId"
-            @select="emit('select', $event)"
-          />
-        </template>
-      </BtVirtualList>
-      <template v-else>
-        <TaxonTreeNode
-          v-for="child in children"
-          :key="`${child.id}-${activeView}`"
-          :node="child"
-          :depth="depth + 1"
-          :locale="locale"
-          :view="activeView"
-          :selected-id="selectedId"
-          @select="emit('select', $event)"
-        />
-      </template>
-      <div v-if="hasMore" class="more" :style="{ paddingLeft: `${1.2 + depth * 0.9}rem` }">
-        <BtButton variant="ghost" :disabled="loadingMore" @click="loadMore">
-          {{ loadingMore ? t('common.loading') : t('browse.loadMore') }}
-        </BtButton>
+      <TaxonTreeNode
+        v-for="child in children"
+        :key="`${child.id}-${activeView()}`"
+        :node="child"
+        :depth="depth + 1"
+        :locale="locale"
+        :view="activeView()"
+        :selected-id="selectedId"
+        @select="emit('select', $event)"
+      />
+      <div v-if="hasMore" ref="sentinel" class="sentinel">
+        {{ loadingMore ? t('common.loading') : t('browse.loadingMore') }}
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.node {
+  --rail: 0.72rem;
+  --rail-gap: 0.28rem;
+}
+
 .row {
-  width: 100%;
   display: grid;
-  grid-template-columns: 1.2rem 1fr auto;
-  gap: var(--space-2);
+  grid-template-columns: 0.7rem minmax(0, 1fr) auto;
+  gap: 0.28rem;
   align-items: center;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
-  padding: 0.45rem 0.75rem;
+  width: 100%;
+  margin-bottom: 0.18rem;
+  padding: 0.38rem 0.5rem 0.38rem 0.38rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  position: relative;
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.row:hover,
-.row.active {
+.row:hover {
   background: var(--color-bg-muted);
 }
 
+.row.active {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-elevated));
+}
+
+.row.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: 1px;
+}
+
 .chevron {
+  display: grid;
+  place-items: center;
+  width: 0.7rem;
+  line-height: 1;
+  font-size: 0.7rem;
   transition: transform var(--duration-fast) var(--ease-out);
   color: var(--color-text-muted);
 }
@@ -199,7 +240,9 @@ watch(activeView, resetChildrenCache)
 }
 
 .names strong {
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -215,16 +258,31 @@ watch(activeView, resetChildrenCache)
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
-.hint {
+.kids {
+  position: relative;
+  margin-left: var(--rail);
+  padding-left: var(--rail-gap);
+}
+
+.kids::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0.35rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  pointer-events: none;
+}
+
+.hint,
+.sentinel {
   margin: 0;
-  padding-left: 2rem;
+  padding: 0.35rem 0.7rem;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-}
-
-.more {
-  margin-top: var(--space-1);
 }
 </style>

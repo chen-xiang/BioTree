@@ -1,19 +1,28 @@
 /**
- * 首页：品牌英雄级入口 + 轻量统计。
+ * 首页：阶元脊柱作为主视觉，配合库藏数量进入浏览。
  *
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 强化品牌英雄区与动效，去掉首屏 API 状态
+ * Updated: 2026-09-01 用林奈七级脊柱替换抽象叶片，管理入口降为文字链
  */
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import BtButton from '@/components/ui/BtButton.vue'
 import { fetchStatsSummary, type StatsSummary } from '@/api/stats'
+import RankSpine from '@/components/taxon/RankSpine.vue'
+import BtButton from '@/components/ui/BtButton.vue'
+import { useLocaleStore } from '@/stores/locale'
 
 const { t } = useI18n()
+const localeStore = useLocaleStore()
 const stats = ref<StatsSummary | null>(null)
+
+const tally = computed(() => {
+  if (!stats.value) return ''
+  return stats.value.totalTaxa.toLocaleString(localeStore.locale === 'zh-CN' ? 'zh-CN' : 'en-US')
+})
 
 onMounted(async () => {
   try {
@@ -34,57 +43,49 @@ onMounted(async () => {
         <RouterLink to="/browse">
           <BtButton>{{ t('home.ctaBrowse') }}</BtButton>
         </RouterLink>
-        <RouterLink to="/admin/taxa">
-          <BtButton variant="ghost">{{ t('home.ctaAdmin') }}</BtButton>
-        </RouterLink>
+        <RouterLink class="admin-link" to="/admin/taxa">{{ t('home.ctaAdmin') }}</RouterLink>
       </div>
       <p v-if="stats" class="stats">
-        {{ t('home.statsLine', { n: stats.totalTaxa }) }}
+        <strong>{{ tally }}</strong>
+        <span>{{ t('home.statsLine') }}</span>
       </p>
     </div>
-    <div class="hero-visual" aria-hidden="true">
-      <div class="ring ring-a" />
-      <div class="ring ring-b" />
-      <div class="leaf" />
-    </div>
+    <RankSpine
+      class="hero-spine"
+      :counts="stats?.byRank"
+      :caption="t('home.spineCaption')"
+    />
   </section>
 </template>
 
 <style scoped>
 .hero {
-  min-height: calc(100vh - 5.5rem);
+  min-height: calc(100vh - 6.5rem);
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(16rem, 0.75fr);
   gap: var(--space-6);
   align-items: center;
-  position: relative;
-  overflow: hidden;
 }
 
 .hero-copy {
-  position: relative;
-  z-index: 1;
-  animation: rise var(--duration-normal) var(--ease-out);
   max-width: 34rem;
 }
 
 .brand {
   margin: 0 0 var(--space-4);
   font-family: var(--font-display);
-  font-size: clamp(2.4rem, 6vw, 4rem);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  animation: brand-in 700ms var(--ease-out) both;
+  font-size: clamp(2.6rem, 6vw, 4.25rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
 }
 
 h1 {
   margin: 0 0 var(--space-3);
   font-family: var(--font-display);
-  font-size: clamp(1.35rem, 2.6vw, 1.85rem);
+  font-size: clamp(1.45rem, 2.8vw, 2rem);
   line-height: 1.25;
-  font-weight: 550;
-  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 .subtitle {
@@ -97,117 +98,59 @@ h1 {
 .cta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  animation: rise 500ms var(--ease-out) 120ms both;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.admin-link {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.1rem;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.admin-link:hover {
+  color: var(--color-text);
 }
 
 .stats {
-  margin: var(--space-5) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-6) 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
 
-.hero-visual {
-  position: relative;
-  min-height: min(52vh, 28rem);
+.stats strong {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.hero-spine {
+  padding: var(--space-5) var(--space-6);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--color-primary) 28%, transparent), transparent 55%),
-    linear-gradient(145deg, color-mix(in srgb, var(--color-bg-elevated) 80%, #9bb89a), var(--color-bg));
-  overflow: hidden;
-  animation: wash 12s ease-in-out infinite alternate;
-}
-
-.ring {
-  position: absolute;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
-  border-radius: 50%;
-}
-
-.ring-a {
-  width: 70%;
-  aspect-ratio: 1;
-  left: 15%;
-  top: 12%;
-  animation: spin 28s linear infinite;
-}
-
-.ring-b {
-  width: 42%;
-  aspect-ratio: 1;
-  right: 12%;
-  bottom: 16%;
-  animation: spin 18s linear infinite reverse;
-}
-
-.leaf {
-  position: absolute;
-  width: 38%;
-  aspect-ratio: 0.72;
-  left: 31%;
-  top: 28%;
-  border-radius: 60% 40% 55% 45%;
-  background: color-mix(in srgb, var(--color-primary) 55%, #d7e8cf);
-  transform: rotate(-18deg);
-  animation: float 5.5s var(--ease-out) infinite alternate;
+  box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 860px) {
   .hero {
     grid-template-columns: 1fr;
     min-height: auto;
-    padding: var(--space-6) 0;
+    gap: var(--space-6);
+    padding: var(--space-4) 0;
   }
 
-  .hero-visual {
-    min-height: 14rem;
+  .hero-spine {
     order: -1;
-  }
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes brand-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes float {
-  from {
-    transform: rotate(-18deg) translateY(0);
-  }
-  to {
-    transform: rotate(-12deg) translateY(-10px);
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes wash {
-  from {
-    filter: saturate(1);
-  }
-  to {
-    filter: saturate(1.08);
+    padding: var(--space-4);
   }
 }
 </style>

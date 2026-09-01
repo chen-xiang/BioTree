@@ -3,6 +3,7 @@
  *
  * Author: chen-xiang
  * Created: 2026-08-31
+ * Updated: 2026-09-01 使用细滚动条，仅服务扁平列表
  */
 <script setup lang="ts" generic="T">
 import { computed, onMounted, ref } from 'vue'
@@ -54,7 +55,7 @@ onMounted(() => {
 <template>
   <div
     ref="root"
-    class="bt-virtual"
+    class="bt-virtual bt-scroll"
     :style="{ height: `${height}px` }"
     @scroll.passive="onScroll"
   >
@@ -73,7 +74,6 @@ onMounted(() => {
 
 <style scoped>
 .bt-virtual {
-  overflow: auto;
   position: relative;
   width: 100%;
 }

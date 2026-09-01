@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 使用 simple_parent_id；无冗余时回退 BFS
+ * Updated: 2026-09-01 同层先按阶元深度再按学名
  */
 package com.chenxiang.biotree.application;
 
@@ -11,7 +12,6 @@ import com.chenxiang.biotree.domain.taxon.Taxon;
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
 import com.chenxiang.biotree.infrastructure.persistence.TaxonRepository;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +20,6 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -38,7 +37,7 @@ public class SimpleTaxonChildrenCollector {
         Pageable sorted = PageRequest.of(
                 pageable.getPageNumber(),
                 pageable.getPageSize(),
-                Sort.by(Sort.Direction.ASC, "scientificName"));
+                TaxonSiblingSort.PAGE_SORT);
         if (parentId == null) {
             return taxonRepository.findBySimpleParentIsNullAndRankIn(TaxonRank.LINNAEAN_SEVEN, sorted);
         }
@@ -79,7 +78,7 @@ public class SimpleTaxonChildrenCollector {
         if (parentId == null) {
             return taxonRepository.findByParentIsNullOrderByScientificNameAsc().stream()
                     .filter(t -> TaxonRank.LINNAEAN_SEVEN.contains(t.getRank()))
-                    .sorted(Comparator.comparing(Taxon::getScientificName, String.CASE_INSENSITIVE_ORDER))
+                    .sorted(TaxonSiblingSort.COMPARATOR)
                     .toList();
         }
         frontier.add(parentId);
@@ -106,7 +105,7 @@ public class SimpleTaxonChildrenCollector {
         }
 
         return found.values().stream()
-                .sorted(Comparator.comparing(Taxon::getScientificName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(TaxonSiblingSort.COMPARATOR)
                 .toList();
     }
 }

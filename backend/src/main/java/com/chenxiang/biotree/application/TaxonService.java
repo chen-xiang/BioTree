@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 locale 回退、前缀优先搜索、节点移动
+ * Updated: 2026-09-01 子节点列表按阶元深度优先排序
  */
 package com.chenxiang.biotree.application;
 
@@ -94,7 +95,7 @@ public class TaxonService {
     public PageResult<TaxonListItemDto> listChildren(
             Long parentId, String locale, int page, int size, TaxonView view) {
         String resolvedLocale = LocaleSupport.normalize(locale);
-        PageRequest pageable = pageRequest(page, size);
+        PageRequest pageable = childrenPageRequest(page, size);
         if (view == TaxonView.FULL) {
             Page<Taxon> taxa = parentId == null
                     ? taxonRepository.findByParentIsNull(pageable)
@@ -601,9 +602,17 @@ public class TaxonService {
     }
 
     private static PageRequest pageRequest(int page, int size) {
+        return pageRequest(page, size, Sort.by(Sort.Direction.ASC, "scientificName"));
+    }
+
+    private static PageRequest childrenPageRequest(int page, int size) {
+        return pageRequest(page, size, TaxonSiblingSort.PAGE_SORT);
+    }
+
+    private static PageRequest pageRequest(int page, int size, Sort sort) {
         int safePage = Math.max(page, AppConstants.DEFAULT_PAGE);
         int safeSize = size <= 0 ? AppConstants.DEFAULT_PAGE_SIZE : Math.min(size, AppConstants.MAX_PAGE_SIZE);
-        return PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "scientificName"));
+        return PageRequest.of(safePage, safeSize, sort);
     }
 
     private record MergedI18n(String commonName, String summary, String description, String contentLocale) {

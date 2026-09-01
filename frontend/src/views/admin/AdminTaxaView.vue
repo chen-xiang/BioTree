@@ -8,6 +8,7 @@
  * Updated: 2026-08-31 支持节点移动与设计系统表单控件
  * Updated: 2026-08-31 搜索导航、面包屑、任意父移动、图注更新
  * Updated: 2026-08-31 完整阶元管理（view=full）与中间级等级
+ * Updated: 2026-09-01 列表行与预览开关对齐标本台账风格
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -33,35 +34,13 @@ import BtInput from '@/components/ui/BtInput.vue'
 import BtPagination from '@/components/ui/BtPagination.vue'
 import BtSelect from '@/components/ui/BtSelect.vue'
 import BtTextarea from '@/components/ui/BtTextarea.vue'
+import { TAXON_RANK_ORDER } from '@/domain/ranks'
 import { useLocaleStore } from '@/stores/locale'
 import { useToastStore } from '@/stores/toast'
 import { messageFromApiError, rankLabel } from '@/utils/apiError'
 import { debounce } from '@/utils/debounce'
 
 type Crumb = { id: number | null; label: string }
-
-/** 管理端按完整阶元编辑；主级在前，中间级随后 */
-const RANKS: TaxonRank[] = [
-  'KINGDOM',
-  'SUBKINGDOM',
-  'PHYLUM',
-  'SUBPHYLUM',
-  'CLASS',
-  'SUBCLASS',
-  'ORDER',
-  'SUBORDER',
-  'SUPERFAMILY',
-  'FAMILY',
-  'SUBFAMILY',
-  'TRIBE',
-  'GENUS',
-  'SUBGENUS',
-  'SPECIES',
-  'SUBSPECIES',
-  'VARIETY',
-  'FORM',
-  'OTHER',
-]
 const ADMIN_VIEW_FULL = 'full' as const
 const ADMIN_VIEW_SIMPLE = 'simple' as const
 const PAGE_SIZE = 30
@@ -71,7 +50,9 @@ const { t } = useI18n()
 const localeStore = useLocaleStore()
 const toast = useToastStore()
 const apiLocale = computed(() => localeStore.locale)
-const rankOptions = computed(() => RANKS.map((rank) => ({ value: rank, label: rankLabel(rank) })))
+const rankOptions = computed(() =>
+  TAXON_RANK_ORDER.map((rank) => ({ value: rank, label: rankLabel(rank) })),
+)
 const previewSimple = ref(false)
 const listView = computed(() => (previewSimple.value ? ADMIN_VIEW_SIMPLE : ADMIN_VIEW_FULL))
 
@@ -621,6 +602,7 @@ header p {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 
 .search-bar label {
@@ -630,15 +612,24 @@ header p {
 
 .path {
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.path .linkish {
+  color: var(--color-primary);
 }
 
 .preview-toggle {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
-  margin: var(--space-3) 0 var(--space-4);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
   font-size: var(--text-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .preview-toggle em {
@@ -666,8 +657,12 @@ li {
   justify-content: space-between;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+li:hover {
+  background: var(--color-bg-muted);
 }
 
 .item-main {
@@ -761,11 +756,11 @@ li {
 }
 
 .ok {
-  color: var(--color-success, #067647);
+  color: var(--color-success);
 }
 
 .error {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 @media (max-width: 900px) {

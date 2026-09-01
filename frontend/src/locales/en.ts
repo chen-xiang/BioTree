@@ -6,6 +6,8 @@
  * Updated: 2026-08-31 Add browse and admin taxon copy
  * Updated: 2026-08-31 Add media management copy
  * Updated: 2026-08-31 Add load-more and move copy
+ * Updated: 2026-09-01 Align home and browse copy with the specimen-plate UI
+ * Updated: 2026-09-01 Tree auto-load copy
  */
 export default {
   common: {
@@ -23,11 +25,12 @@ export default {
     login: 'Sign in',
   },
   home: {
-    headline: 'Explore the tree of life',
-    subtitle: 'Browse, search, and manage taxa across kingdom to species.',
-    ctaBrowse: 'Start browsing',
-    ctaAdmin: 'Open admin',
-    statsLine: '{n} taxa in the library',
+    headline: 'From kingdom to species',
+    subtitle: 'Walk the Catalogue of Life hierarchy. Search names, read descriptions, and open plates.',
+    ctaBrowse: 'Open the tree',
+    ctaAdmin: 'Admin',
+    statsLine: 'taxa in the collection',
+    spineCaption: 'Linnaean ranks',
   },
   browse: {
     title: 'Taxon browser',
@@ -36,9 +39,11 @@ export default {
     search: 'Search',
     searchPlaceholder: 'Scientific or common name',
     searchResults: 'Search results',
-    selectHint: 'Select a taxon on the left to view details.',
+    selectHint: 'Open a rank on the left to load its specimen card.',
+    clearSearch: 'Clear',
     childrenCount: '{n} children',
     loadMore: 'Load more',
+    loadingMore: 'Loading more ranks…',
     loadMoreMedia: 'Load more images',
     synonyms: 'Synonyms',
     detailTab: 'Detail',
@@ -62,7 +67,10 @@ export default {
     title: 'Admin console',
     placeholder: 'Use the sidebar to manage taxa and multilingual descriptions.',
     homeSubtitle: 'Library size, import progress, and shortcuts into taxon maintenance.',
+    navWorkbench: 'Workbench',
+    navOverview: 'Overview',
     taxaNav: 'Taxa',
+    statByRank: 'By rank',
     taxaTitle: 'Manage taxa',
     taxaSubtitle: 'Search to jump, maintain children under a parent, move taxa, and edit media.',
     previewSimple: 'Simple preview',
