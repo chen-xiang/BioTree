@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 完整阶元与多语言
  * Updated: 2026-09-02 覆盖 provisionally accepted
+ * Updated: 2026-09-03 同父学名去重音折叠
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -47,5 +48,15 @@ class ColNameUtilsTest {
     @Test
     void stripAuthorshipForHigherRanks() {
         assertEquals("Chordata", ColNameUtils.stripAuthorship("Chordata Bateson, 1885"));
+    }
+
+    @Test
+    void foldForParentNameUniqueIgnoresCaseAndLatinAccents() {
+        assertEquals(
+                ColNameUtils.foldForParentNameUnique("Drepanodorylaimus szekessyi"),
+                ColNameUtils.foldForParentNameUnique("Drepanodorylaimus székessyi"));
+        assertEquals(
+                "drepanodorylaimus szekessyi",
+                ColNameUtils.foldForParentNameUnique("Drepanodorylaimus Székessyi"));
     }
 }

@@ -7,6 +7,7 @@
  * Updated: 2026-09-01 覆盖同父同名属在同一批次中的合并
  * Updated: 2026-09-02 覆盖 replace 时旧 RANK_SPECIES 断点不得跳过界到属
  * Updated: 2026-09-02 覆盖 keyset 多页落库
+ * Updated: 2026-09-03 同父重音学名合并为一条
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -286,6 +287,34 @@ class ColDwcaImporterTest {
         assertEquals(1, species);
     }
 
+    @Test
+    void accentedDuplicateScientificNameShouldCollapseToOneTaxon() throws Exception {
+        Path zip = tempDir.resolve("accent_duplicate_dwca.zip");
+        writeAccentDuplicateFixture(zip);
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(true);
+        properties.setResume(false);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(false);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setCommitBatchSize(50);
+        properties.setKingdoms(List.of("Animalia"));
+        properties.setRankMode("full");
+
+        importer.importArchive(zip, properties);
+
+        Integer species = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND scientific_name LIKE 'Drepanodorylaimus sz%'
+                """,
+                Integer.class);
+        assertEquals(1, species);
+    }
+
     private static void writeFixture(Path zip) throws IOException {
         String taxonHeader =
                 "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
@@ -428,6 +457,26 @@ class ColDwcaImporterTest {
                 + "GE1\tFA1\t\t\t\t\taccepted\tgenus\tReceptaculites\tDefrance, 1827\t\tReceptaculites\t\t\t\t\t\t\t\t\tAnimalia\n"
                 + "GE2\tFA1\t\t\t\t\taccepted\tgenus\tReceptaculites\tBlumenbach, 1805\t\tReceptaculites\t\t\t\t\t\t\t\t\tAnimalia\n"
                 + "SP1\tGE2\t\t\t\t\taccepted\tspecies\tReceptaculites neptuni\t\t\tReceptaculites\t\tneptuni\t\t\t\t\t\t\tAnimalia\n";
+        try (OutputStream out = Files.newOutputStream(zip);
+                ZipOutputStream zipOut = new ZipOutputStream(out)) {
+            zipOut.putNextEntry(new ZipEntry("Taxon.tsv"));
+            zipOut.write(taxa.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+        }
+    }
+
+    private static void writeAccentDuplicateFixture(Path zip) throws IOException {
+        String taxonHeader =
+                "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
+        String taxa = taxonHeader
+                + "N\t\t\t\t\t\taccepted\tkingdom\tAnimalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "PH1\tN\t\t\t\t\taccepted\tphylum\tNematoda\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "CL1\tPH1\t\t\t\t\taccepted\tclass\tEnoplea\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "OR1\tCL1\t\t\t\t\taccepted\torder\tDorylaimida\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "FA1\tOR1\t\t\t\t\taccepted\tfamily\tDorylaimidae\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "GE1\tFA1\t\t\t\t\taccepted\tgenus\tDrepanodorylaimus\t\t\tDrepanodorylaimus\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "SP1\tGE1\t\t\t\t\taccepted\tspecies\tDrepanodorylaimus szekessyi\t\t\tDrepanodorylaimus\t\tszekessyi\t\t\t\t\t\t\tAnimalia\n"
+                + "SP2\tGE1\t\t\t\t\taccepted\tspecies\tDrepanodorylaimus székessyi\t\t\tDrepanodorylaimus\t\tszékessyi\t\t\t\t\t\t\tAnimalia\n";
         try (OutputStream out = Files.newOutputStream(zip);
                 ZipOutputStream zipOut = new ZipOutputStream(out)) {
             zipOut.putNextEntry(new ZipEntry("Taxon.tsv"));

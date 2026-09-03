@@ -11,6 +11,8 @@
  * Updated: 2026-09-02 replace/非续跑不再沿用旧 checkpoint 跳过高等级
  * Updated: 2026-09-02 落库改为 keyset 分页、少写 checkpoint，MySQL 导入期间挂起全文索引
  * Updated: 2026-09-02 续跑/落库校验、表头解析、空界异名、按 external_id 回查主键
+ * Updated: 2026-09-03 全文索引仅在导入成功后尽力加回，失败不中断、不掩盖落库异常
+ * Updated: 2026-09-03 同父学名按去重音折叠，冲突时并入已有节点
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -130,6 +132,7 @@ public class ColDwcaImporter {
         }
 
         boolean droppedFulltext = false;
+        boolean completed = false;
         try (ZipFile zip = new ZipFile(dwcaZip.toFile())) {
             // replace 会清库但 existing 仍是删除前读到的旧断点；非续跑必须从头落库
             String phase = resuming
@@ -255,13 +258,16 @@ public class ColDwcaImporter {
                     stats.distributionCount(),
                     stats.mediaCount(),
                     stats.byRank());
+            completed = true;
             return stats;
         } catch (IOException ex) {
             log.error("Failed to read DwC-A archive {}", dwcaZip, ex);
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to read DwC-A archive");
         } finally {
-            if (droppedFulltext) {
+            if (droppedFulltext && completed) {
                 restoreMysqlFulltextIndexes();
+            } else if (droppedFulltext) {
+                log.warn("Skipped restoring FULLTEXT indexes after a failed import");
             }
         }
     }
@@ -516,7 +522,8 @@ public class ColDwcaImporter {
                 pending.add(new PendingInsert(row, parentDbId, uniqKey));
             }
             if (!pending.isEmpty()) {
-                flushInsertBatch(pending, externalToId, idToPath, idToRank, parentNameToId, inserted, ts, jobKey, rank);
+                flushInsertBatch(
+                        pending, externalToId, idToPath, idToRank, parentNameToId, inserted, ts, jobKey, rank);
                 attachPendingNameAliases(pendingAliases, parentNameToId, externalToId);
             }
         }
@@ -525,6 +532,50 @@ public class ColDwcaImporter {
     }
 
     private void flushInsertBatch(
+            List<PendingInsert> pending,
+            Map<String, Long> externalToId,
+            Map<Long, String> idToPath,
+            Map<Long, TaxonRank> idToRank,
+            Map<String, Long> parentNameToId,
+            AtomicInteger inserted,
+            Timestamp ts,
+            String jobKey,
+            TaxonRank rank) {
+        try {
+            writePendingInserts(
+                    pending, externalToId, idToPath, idToRank, parentNameToId, inserted, ts, jobKey, rank);
+        } catch (BusinessException ex) {
+            if (!isDuplicateParentName(ex)) {
+                throw ex;
+            }
+            if (pending.size() == 1) {
+                aliasDuplicateParentName(pending.getFirst(), externalToId, idToPath, idToRank, parentNameToId);
+                return;
+            }
+            log.warn("Batch insert hit uk_taxon_parent_name, retrying {} rows individually", pending.size());
+            for (PendingInsert item : pending) {
+                try {
+                    writePendingInserts(
+                            List.of(item),
+                            externalToId,
+                            idToPath,
+                            idToRank,
+                            parentNameToId,
+                            inserted,
+                            ts,
+                            jobKey,
+                            rank);
+                } catch (BusinessException rowEx) {
+                    if (!isDuplicateParentName(rowEx)) {
+                        throw rowEx;
+                    }
+                    aliasDuplicateParentName(item, externalToId, idToPath, idToRank, parentNameToId);
+                }
+            }
+        }
+    }
+
+    private void writePendingInserts(
             List<PendingInsert> pending,
             Map<String, Long> externalToId,
             Map<Long, String> idToPath,
@@ -872,7 +923,67 @@ public class ColDwcaImporter {
 
     private static String uniquenessKey(Long parentId, String scientificName) {
         String parentPart = parentId == null ? "ROOT" : parentId.toString();
-        return parentPart + "|" + scientificName.toLowerCase(Locale.ROOT);
+        return parentPart + "|" + ColNameUtils.foldForParentNameUnique(scientificName);
+    }
+
+    private static boolean isDuplicateParentName(Throwable ex) {
+        Throwable cursor = ex;
+        while (cursor != null) {
+            String message = cursor.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains("uk_taxon_parent_name")) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
+    }
+
+    private void aliasDuplicateParentName(
+            PendingInsert item,
+            Map<String, Long> externalToId,
+            Map<Long, String> idToPath,
+            Map<Long, TaxonRank> idToRank,
+            Map<String, Long> parentNameToId) {
+        Long existingId = lookupIdByParentName(item.parentDbId(), item.row().scientificName());
+        if (existingId == null) {
+            throw new BusinessException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Duplicate parent name but no existing row for " + item.row().scientificName());
+        }
+        externalToId.put(item.row().externalId(), existingId);
+        parentNameToId.put(item.uniqKey(), existingId);
+        if (!idToPath.containsKey(existingId) || !idToRank.containsKey(existingId)) {
+            jdbcTemplate.query(
+                    "SELECT materialized_path, taxon_rank FROM taxon WHERE id = ?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                        idToPath.putIfAbsent(existingId, rs.getString(1));
+                        try {
+                            idToRank.putIfAbsent(existingId, TaxonRank.valueOf(rs.getString(2)));
+                        } catch (Exception ignored) {
+                            // skip unknown
+                        }
+                    },
+                    existingId);
+        }
+        log.info(
+                "Aliased duplicate scientific name {} under parent {} to taxon {}",
+                item.row().scientificName(),
+                item.parentDbId(),
+                existingId);
+    }
+
+    private Long lookupIdByParentName(Long parentId, String scientificName) {
+        List<Long> ids = parentId == null
+                ? jdbcTemplate.query(
+                        "SELECT id FROM taxon WHERE parent_id IS NULL AND scientific_name = ? LIMIT 1",
+                        (rs, rowNum) -> rs.getLong(1),
+                        scientificName)
+                : jdbcTemplate.query(
+                        "SELECT id FROM taxon WHERE parent_id = ? AND scientific_name = ? LIMIT 1",
+                        (rs, rowNum) -> rs.getLong(1),
+                        parentId,
+                        scientificName);
+        return ids.isEmpty() ? null : ids.getFirst();
     }
 
     private int importVernaculars(InputStream in, Map<String, Long> externalToId, int batchSize) throws IOException {
@@ -1083,10 +1194,14 @@ public class ColDwcaImporter {
         if (!isMySql()) {
             return;
         }
-        addMysqlFulltextIfMissing("taxon", "ft_taxon_scientific_name", "scientific_name");
-        addMysqlFulltextIfMissing("taxon_i18n", "ft_taxon_i18n_common_name", "common_name");
-        addMysqlFulltextIfMissing("taxon_synonym", "ft_taxon_synonym_name", "scientific_name");
-        log.info("Restored MySQL FULLTEXT indexes after import");
+        MysqlFulltextIndexSupport.restoreQuietly(
+                () -> {
+                    addMysqlFulltextIfMissing("taxon", "ft_taxon_scientific_name", "scientific_name");
+                    addMysqlFulltextIfMissing("taxon_i18n", "ft_taxon_i18n_common_name", "common_name");
+                    addMysqlFulltextIfMissing("taxon_synonym", "ft_taxon_synonym_name", "scientific_name");
+                    log.info("Restored MySQL FULLTEXT indexes after import");
+                },
+                log);
     }
 
     private boolean dropMysqlIndexIfPresent(String table, String indexName) {
@@ -1101,7 +1216,11 @@ public class ColDwcaImporter {
         if (mysqlIndexCount(table, indexName) > 0) {
             return;
         }
-        jdbcTemplate.execute("ALTER TABLE " + table + " ADD FULLTEXT INDEX " + indexName + " (" + column + ")");
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + table + " ADD FULLTEXT INDEX " + indexName + " (" + column + ")");
+        } catch (RuntimeException ex) {
+            log.warn("Failed to add FULLTEXT {} on {}; search will use LIKE fallback", indexName, table, ex);
+        }
     }
 
     private int mysqlIndexCount(String table, String indexName) {

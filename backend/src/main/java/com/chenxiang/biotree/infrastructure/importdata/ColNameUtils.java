@@ -5,10 +5,12 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 完整阶元映射与多语言俗名扩展（R1/R2/R6）
  * Updated: 2026-09-02 接受 provisionally accepted 为有效分类地位
+ * Updated: 2026-09-03 同父学名唯一键按去重音折叠，对齐 MySQL ai_ci
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
+import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Optional;
 import org.springframework.util.StringUtils;
@@ -38,6 +40,24 @@ public final class ColNameUtils {
 
     public static Optional<TaxonRank> mapRank(String raw) {
         return mapRank(raw, true);
+    }
+
+    /**
+     * 折叠学名以便与 MySQL {@code utf8mb4_0900_ai_ci} 的同父唯一约束对齐（大小写、重音不敏感）。
+     */
+    public static String foldForParentNameUnique(String scientificName) {
+        if (!StringUtils.hasText(scientificName)) {
+            return "";
+        }
+        String nfd = Normalizer.normalize(scientificName.trim(), Normalizer.Form.NFD);
+        StringBuilder folded = new StringBuilder(nfd.length());
+        for (int i = 0; i < nfd.length(); i++) {
+            char ch = nfd.charAt(i);
+            if (Character.getType(ch) != Character.NON_SPACING_MARK) {
+                folded.append(ch);
+            }
+        }
+        return folded.toString().toLowerCase(Locale.ROOT);
     }
 
     /** accepted / provisionally accepted 视为接受名。 */
