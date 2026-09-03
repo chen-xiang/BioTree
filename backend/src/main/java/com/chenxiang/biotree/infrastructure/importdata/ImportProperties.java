@@ -5,6 +5,9 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加断点续跑、异名导入与提交批次配置
  * Updated: 2026-09-01 enabled 仅对 importCol / ImportApplication 生效
+ * Updated: 2026-09-01 默认导入 CoL 七界
+ * Updated: 2026-09-02 默认提交批次改为 2000
+ * Updated: 2026-09-02 默认界名含 CoL 现行原核界（Bacillati 等）
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -29,8 +32,29 @@ public class ImportProperties {
      */
     private boolean resume = true;
 
-    /** 导入界过滤，默认动物界与植物界。 */
-    private List<String> kingdoms = new ArrayList<>(List.of("Animalia", "Plantae"));
+    /**
+     * 默认导入的界：林奈/CoL 传统七界，外加 2024 年后 CoL 使用的原核界名。
+     * 现行包里已无 Bacteria/Archaea 列值，仍保留以便旧包兼容。
+     */
+    public static final List<String> DEFAULT_KINGDOMS = List.of(
+            "Animalia",
+            "Archaea",
+            "Bacteria",
+            "Chromista",
+            "Fungi",
+            "Plantae",
+            "Protozoa",
+            "Bacillati",
+            "Fusobacteriati",
+            "Pseudomonadati",
+            "Thermotogati",
+            "Methanobacteriati",
+            "Nanobdellati",
+            "Promethearchaeati",
+            "Thermoproteati");
+
+    /** 导入界过滤，默认 CoL 七界。 */
+    private List<String> kingdoms = new ArrayList<>(DEFAULT_KINGDOMS);
 
     /** 每种等级最多导入条数；0 表示不限制。 */
     private int maxPerRank;
@@ -51,7 +75,7 @@ public class ImportProperties {
     private boolean importMedia = true;
 
     /** 每批提交的插入条数（小事务，便于断点）。 */
-    private int commitBatchSize = 500;
+    private int commitBatchSize = 2000;
 
     /** checkpoint 任务键。 */
     private String jobKey = "col";

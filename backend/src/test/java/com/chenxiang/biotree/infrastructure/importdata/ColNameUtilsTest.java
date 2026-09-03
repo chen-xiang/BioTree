@@ -4,10 +4,12 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 完整阶元与多语言
+ * Updated: 2026-09-02 覆盖 provisionally accepted
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.chenxiang.biotree.domain.taxon.TaxonRank;
@@ -23,6 +25,9 @@ class ColNameUtilsTest {
         assertEquals("en", ColNameUtils.mapLocale("eng").orElseThrow());
         assertEquals("zh-CN", ColNameUtils.mapLocale("zho").orElseThrow());
         assertEquals("ja", ColNameUtils.mapLocale("jpn").orElseThrow());
+        assertTrue(ColNameUtils.isAcceptedTaxonomicStatus("accepted"));
+        assertTrue(ColNameUtils.isAcceptedTaxonomicStatus("provisionally accepted"));
+        assertFalse(ColNameUtils.isAcceptedTaxonomicStatus("synonym"));
     }
 
     @Test

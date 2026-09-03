@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 启动前端开发服务器（Vite）
+# BioTree - Start the frontend dev server (Vite)
 # Author: chen-xiang
 # Created: 2026-08-31
-# Updated: 2026-09-01 脚本改名为 start-web-dev
-# 用法：./scripts/start-web-dev.sh
-# 前置：Node.js 20+、pnpm
+# Updated: 2026-09-01 Rename script to start-web-dev
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/start-web-dev.sh
+# Requires: Node.js 20+, pnpm
 # =============================================================================
 set -euo pipefail
 

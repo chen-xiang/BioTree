@@ -262,6 +262,8 @@ export interface components {
             rankRaw?: string | null;
             /** @description Physical direct child count */
             directChildCount: number;
+            /** @description Simple-view unclassified bucket */
+            placeholder?: boolean;
         };
         TaxonBreadcrumb: {
             /** Format: int64 */
@@ -319,6 +321,8 @@ export interface components {
             directChildCount: number;
             /** Format: int64 */
             nearestSimpleAncestorId?: number | null;
+            /** @description Simple-view unclassified bucket */
+            placeholder?: boolean;
         };
         TaxonVernacular: {
             locale: string;

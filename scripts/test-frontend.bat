@@ -2,11 +2,12 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 前端 typecheck / lint / unit test / build
+rem BioTree - Frontend typecheck / lint / unit test / build
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\test-frontend.bat
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\test-frontend.bat
 rem =============================================================================
 
 set "EXITCODE=0"

@@ -8,6 +8,7 @@
  * Updated: 2026-08-31 补充加载更多与节点移动文案
  * Updated: 2026-09-01 首页与浏览工作台文案对齐标本台账
  * Updated: 2026-09-01 分类树触底续页文案
+ * Updated: 2026-09-03 缺阶未分类目录文案
  */
 export default {
   common: {
@@ -54,6 +55,8 @@ export default {
     distributions: '分布',
     publishedIn: '发表文献',
     jumpedToVisibleAncestor: '当前节点在简易视图中不可见，已跳到最近七级祖先',
+    unclassified: '未分类',
+    unclassifiedHint: '缺少该阶元的类群收在此目录，避免与上一阶的正式类群平铺。',
   },
   theme: {
     light: '浅色',

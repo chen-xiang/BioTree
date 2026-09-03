@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 安装前端依赖
+# BioTree - Install frontend dependencies
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/install-frontend.sh
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/install-frontend.sh
 # =============================================================================
 set -euo pipefail
 

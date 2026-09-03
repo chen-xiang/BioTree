@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 childCount 随 view；增加 directChildCount
+ * Updated: 2026-09-03 simple 视图未分类占位节点
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -17,5 +18,6 @@ public record TaxonListItemDto(
         int childCount,
         boolean hasChildren,
         String rankRaw,
-        int directChildCount) {
+        int directChildCount,
+        boolean placeholder) {
 }

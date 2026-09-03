@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 启动后端开发服务（Spring Boot）
+# BioTree - Start the backend dev server (Spring Boot)
 # Author: chen-xiang
 # Created: 2026-08-31
-# Updated: 2026-09-01 提示导入走独立脚本
-# Updated: 2026-09-01 脚本改名为 start-server-dev
-# 用法：./scripts/start-server-dev.sh
-# 前置：JDK 21、MySQL（库 biotree，见 application.yml）
+# Updated: 2026-09-01 Point import to standalone scripts
+# Updated: 2026-09-01 Rename script to start-server-dev
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/start-server-dev.sh
+# Requires: JDK 21, MySQL (database biotree, see application.yml)
 # =============================================================================
 set -euo pipefail
 

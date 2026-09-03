@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 locale 回退、前缀优先搜索、节点移动
  * Updated: 2026-09-01 子节点列表按阶元深度优先排序
+ * Updated: 2026-09-03 simple 视图缺阶收入未分类目录
  */
 package com.chenxiang.biotree.application;
 
@@ -106,23 +107,13 @@ public class TaxonService {
                     taxa.getNumber(),
                     taxa.getSize());
         }
-        Page<Taxon> simplePage = simpleChildrenCollector.collectPage(parentId, pageable);
-        if (simplePage.isEmpty() && simpleChildrenCollector.countVisible(parentId) == 0) {
-            List<Taxon> all = simpleChildrenCollector.collect(parentId);
-            int from = Math.min(pageable.getPageNumber() * pageable.getPageSize(), all.size());
-            int to = Math.min(from + pageable.getPageSize(), all.size());
-            List<Taxon> slice = all.subList(from, to);
-            return PageResult.of(
-                    toListItems(slice, resolvedLocale, TaxonView.SIMPLE),
-                    all.size(),
-                    pageable.getPageNumber(),
-                    pageable.getPageSize());
+        SimpleTaxonChildrenCollector.SimpleChildSlice slice =
+                simpleChildrenCollector.collectSlice(parentId, pageable);
+        List<TaxonListItemDto> items = new ArrayList<>(toListItems(slice.taxa(), resolvedLocale, TaxonView.SIMPLE));
+        if (slice.unclassifiedOnPage()) {
+            items.add(unclassifiedListItem(slice, resolvedLocale));
         }
-        return PageResult.of(
-                toListItems(simplePage.getContent(), resolvedLocale, TaxonView.SIMPLE),
-                simplePage.getTotalElements(),
-                simplePage.getNumber(),
-                simplePage.getSize());
+        return PageResult.of(items, slice.total(), slice.page(), slice.size());
     }
 
     @Transactional(readOnly = true)
@@ -150,6 +141,12 @@ public class TaxonService {
     @Transactional(readOnly = true)
     public TaxonDetailDto getDetail(Long id, String locale, TaxonView view) {
         String preferredLocale = LocaleSupport.normalize(locale);
+        if (SimpleUnclassifiedSupport.isUnclassified(id)) {
+            if (view != TaxonView.SIMPLE) {
+                throw new BusinessException(ErrorCode.TAXON_NOT_FOUND);
+            }
+            return unclassifiedDetail(id, preferredLocale);
+        }
         Taxon taxon = requireTaxon(id);
         MergedI18n i18n = mergeI18n(id, preferredLocale);
         List<TaxonBreadcrumbDto> breadcrumbs = buildBreadcrumbs(taxon, preferredLocale, view);
@@ -206,7 +203,8 @@ public class TaxonService {
                 vernaculars,
                 distributions,
                 taxon.getChildCount(),
-                nearestSimpleAncestorId(taxon, view));
+                nearestSimpleAncestorId(taxon, view),
+                false);
     }
 
     private Long nearestSimpleAncestorId(Taxon taxon, TaxonView view) {
@@ -465,9 +463,81 @@ public class TaxonService {
                             viewCount,
                             hasChildren,
                             t.getRankRaw(),
-                            direct);
+                            direct,
+                            false);
                 })
                 .toList();
+    }
+
+    private TaxonListItemDto unclassifiedListItem(
+            SimpleTaxonChildrenCollector.SimpleChildSlice slice, String locale) {
+        int hint = (int) Math.min(Math.max(slice.unclassifiedChildHint(), 1L), Integer.MAX_VALUE);
+        return new TaxonListItemDto(
+                slice.unclassifiedId(),
+                slice.unclassifiedRank(),
+                SimpleUnclassifiedSupport.SCIENTIFIC_NAME,
+                SimpleUnclassifiedSupport.commonName(locale),
+                hint,
+                true,
+                slice.unclassifiedRank().name(),
+                0,
+                true);
+    }
+
+    private TaxonDetailDto unclassifiedDetail(Long id, String locale) {
+        SimpleUnclassifiedSupport.Ref ref = SimpleUnclassifiedSupport.decode(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TAXON_NOT_FOUND));
+        Taxon anchor = ref.anchorId() == null ? null : requireTaxon(ref.anchorId());
+        TaxonRank anchorRank = anchor == null ? null : anchor.getRank();
+        int childCount = (int) Math.min(simpleChildrenCollector.countVisible(id), Integer.MAX_VALUE);
+        return new TaxonDetailDto(
+                id,
+                SimpleUnclassifiedSupport.parentId(ref, anchorRank),
+                ref.rank(),
+                SimpleUnclassifiedSupport.SCIENTIFIC_NAME,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                SimpleUnclassifiedSupport.commonName(locale),
+                SimpleUnclassifiedSupport.summary(locale),
+                null,
+                locale,
+                childCount,
+                true,
+                unclassifiedBreadcrumbs(anchor, ref, locale),
+                List.of(),
+                0L,
+                List.of(),
+                ref.rank().name(),
+                List.of(),
+                List.of(),
+                0,
+                null,
+                true);
+    }
+
+    private List<TaxonBreadcrumbDto> unclassifiedBreadcrumbs(
+            Taxon anchor, SimpleUnclassifiedSupport.Ref ref, String locale) {
+        List<TaxonBreadcrumbDto> crumbs = new ArrayList<>();
+        if (anchor != null) {
+            crumbs.addAll(buildBreadcrumbs(anchor, locale, TaxonView.SIMPLE));
+        }
+        for (TaxonRank gap : TaxonRank.linnaeanBetweenExclusive(anchor == null ? null : anchor.getRank(), ref.rank())) {
+            crumbs.add(unclassifiedCrumb(ref.anchorId(), gap, locale));
+        }
+        crumbs.add(unclassifiedCrumb(ref.anchorId(), ref.rank(), locale));
+        return crumbs;
+    }
+
+    private TaxonBreadcrumbDto unclassifiedCrumb(Long anchorId, TaxonRank rank, String locale) {
+        return new TaxonBreadcrumbDto(
+                SimpleUnclassifiedSupport.encode(anchorId, rank),
+                rank,
+                SimpleUnclassifiedSupport.SCIENTIFIC_NAME,
+                SimpleUnclassifiedSupport.commonName(locale));
     }
 
     private Map<Long, String> loadCommonNames(List<Long> ids, String locale) {
@@ -562,7 +632,28 @@ public class TaxonService {
             result.add(new TaxonBreadcrumbDto(
                     node.getId(), node.getRank(), node.getScientificName(), names.get(id)));
         }
+        if (view == TaxonView.SIMPLE) {
+            return insertUnclassifiedGaps(result, locale);
+        }
         return result;
+    }
+
+    private List<TaxonBreadcrumbDto> insertUnclassifiedGaps(List<TaxonBreadcrumbDto> crumbs, String locale) {
+        if (crumbs.isEmpty()) {
+            return crumbs;
+        }
+        List<TaxonBreadcrumbDto> out = new ArrayList<>();
+        TaxonBreadcrumbDto previous = null;
+        for (TaxonBreadcrumbDto crumb : crumbs) {
+            TaxonRank from = previous == null ? null : previous.rank();
+            Long anchorId = previous == null ? null : previous.id();
+            for (TaxonRank gap : TaxonRank.linnaeanBetweenExclusive(from, crumb.rank())) {
+                out.add(unclassifiedCrumb(anchorId, gap, locale));
+            }
+            out.add(crumb);
+            previous = crumb;
+        }
+        return out;
     }
 
     private TaxonMediaDto toMediaDto(TaxonMedia media) {

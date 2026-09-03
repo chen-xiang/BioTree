@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-09-01 补充同层阶元优先排序
+ * Updated: 2026-09-03 缺阶收入未分类目录
  */
 package com.chenxiang.biotree.application;
 
@@ -46,8 +47,7 @@ class SimpleTaxonChildrenCollectorTest {
         Taxon subfamily = taxon(2L, "Felinae", TaxonRank.SUBFAMILY, family);
         Taxon genus = taxon(3L, "Felis", TaxonRank.GENUS, subfamily);
 
-        when(taxonRepository.countBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN))
-                .thenReturn(0L);
+        when(taxonRepository.findById(1L)).thenReturn(java.util.Optional.of(family));
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(1L)))
                 .thenReturn(List.of(subfamily));
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(2L)))
@@ -76,34 +76,65 @@ class SimpleTaxonChildrenCollectorTest {
 
     @Test
     void collectPageOrdersByRankThenName() {
-        when(taxonRepository.findBySimpleParentIdAndRankIn(
-                        eq(1L), eq(TaxonRank.LINNAEAN_SEVEN), org.mockito.ArgumentMatchers.any(Pageable.class)))
+        Taxon kingdom = taxon(1L, "Plantae", TaxonRank.KINGDOM, null);
+        when(taxonRepository.findById(1L)).thenReturn(java.util.Optional.of(kingdom));
+        when(taxonRepository.findBySimpleParentIdAndRank(
+                        eq(1L), eq(TaxonRank.PHYLUM), org.mockito.ArgumentMatchers.any(Pageable.class)))
                 .thenReturn(Page.empty());
 
         collector.collectPage(1L, PageRequest.of(0, 20));
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(taxonRepository)
-                .findBySimpleParentIdAndRankIn(eq(1L), eq(TaxonRank.LINNAEAN_SEVEN), captor.capture());
+        verify(taxonRepository).findBySimpleParentIdAndRank(eq(1L), eq(TaxonRank.PHYLUM), captor.capture());
         assertEquals(TaxonSiblingSort.PAGE_SORT, captor.getValue().getSort());
     }
 
     @Test
-    void bfsOrdersHigherRanksBeforeSkippedLowerRanks() {
+    void collectKeepsOnlyNextLinnaeanRank() {
         Taxon kingdom = taxon(1L, "Plantae", TaxonRank.KINGDOM, null);
         Taxon genus = taxon(2L, "Aequitriradites", TaxonRank.GENUS, kingdom);
         Taxon phylum = taxon(3L, "Anthocerotophyta", TaxonRank.PHYLUM, kingdom);
         Taxon family = taxon(4L, "Appianaceae", TaxonRank.FAMILY, kingdom);
 
-        when(taxonRepository.countBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN))
-                .thenReturn(0L);
+        when(taxonRepository.findById(1L)).thenReturn(java.util.Optional.of(kingdom));
         when(taxonRepository.findByParentIdInOrderByScientificNameAsc(List.of(1L)))
                 .thenReturn(List.of(genus, family, phylum));
 
         List<Taxon> visible = collector.collect(1L);
-        assertEquals(
-                List.of("Anthocerotophyta", "Appianaceae", "Aequitriradites"),
-                visible.stream().map(Taxon::getScientificName).toList());
+        assertEquals(List.of("Anthocerotophyta"), visible.stream().map(Taxon::getScientificName).toList());
+    }
+
+    @Test
+    void collectSliceAppendsUnclassifiedForSkippedRanks() {
+        Taxon kingdom = taxon(1L, "Plantae", TaxonRank.KINGDOM, null);
+        Taxon phylum = taxon(3L, "Anthocerotophyta", TaxonRank.PHYLUM, kingdom);
+        Taxon family = taxon(4L, "Appianaceae", TaxonRank.FAMILY, kingdom);
+
+        when(taxonRepository.findById(1L)).thenReturn(java.util.Optional.of(kingdom));
+        when(taxonRepository.existsBySimpleParentIdAndRankIn(1L, TaxonRank.LINNAEAN_SEVEN)).thenReturn(true);
+        when(taxonRepository.countBySimpleParentIdAndRank(1L, TaxonRank.PHYLUM)).thenReturn(1L);
+        when(taxonRepository.existsBySimpleParentIdAndRankIn(
+                        eq(1L), eq(TaxonRank.linnaeanDeeperThan(TaxonRank.PHYLUM))))
+                .thenReturn(true);
+        when(taxonRepository.findBySimpleParentIdAndRank(
+                        eq(1L), eq(TaxonRank.PHYLUM), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(phylum)));
+        long unclassifiedClass = SimpleUnclassifiedSupport.encode(1L, TaxonRank.CLASS);
+        when(taxonRepository.countBySimpleParentIdAndRank(1L, TaxonRank.CLASS)).thenReturn(0L);
+        when(taxonRepository.existsBySimpleParentIdAndRankIn(
+                        eq(1L), eq(TaxonRank.linnaeanDeeperThan(TaxonRank.CLASS))))
+                .thenReturn(true);
+
+        SimpleTaxonChildrenCollector.SimpleChildSlice slice =
+                collector.collectSlice(1L, PageRequest.of(0, 20));
+
+        assertEquals(1, slice.taxa().size());
+        assertEquals("Anthocerotophyta", slice.taxa().getFirst().getScientificName());
+        assertTrue(slice.unclassifiedOnPage());
+        assertEquals(SimpleUnclassifiedSupport.encode(1L, TaxonRank.PHYLUM), slice.unclassifiedId());
+        assertEquals(2L, slice.total());
+        assertEquals(unclassifiedClass, SimpleUnclassifiedSupport.encode(1L, TaxonRank.CLASS));
+        assertEquals(family.getRank(), TaxonRank.FAMILY);
     }
 
     private static Taxon taxon(Long id, String name, TaxonRank rank, Taxon parent) {

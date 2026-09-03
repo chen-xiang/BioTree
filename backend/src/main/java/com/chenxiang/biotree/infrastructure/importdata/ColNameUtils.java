@@ -4,6 +4,7 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 完整阶元映射与多语言俗名扩展（R1/R2/R6）
+ * Updated: 2026-09-02 接受 provisionally accepted 为有效分类地位
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -37,6 +38,15 @@ public final class ColNameUtils {
 
     public static Optional<TaxonRank> mapRank(String raw) {
         return mapRank(raw, true);
+    }
+
+    /** accepted / provisionally accepted 视为接受名。 */
+    public static boolean isAcceptedTaxonomicStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        return "accepted".equals(normalized) || "provisionally accepted".equals(normalized);
     }
 
     /**

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 前后端测试（先后端后前端）
+# BioTree - Run backend then frontend tests
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/test-all.sh
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/test-all.sh
 # =============================================================================
 set -euo pipefail
 

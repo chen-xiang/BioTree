@@ -2,12 +2,13 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 后端单元/集成测试
+rem BioTree - Backend unit and integration tests
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 启动前解析 JDK 21
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\test-backend.bat
+rem Updated: 2026-09-01 Resolve JDK 21 before start
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\test-backend.bat
 rem =============================================================================
 
 set "EXITCODE=0"

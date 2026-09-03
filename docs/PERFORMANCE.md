@@ -1,6 +1,6 @@
 # BioTree 页面加载与显示性能
 
-在动物界、植物界近乎完整覆盖（可达百万级节点）的前提下，保证浏览与管理可用的性能约定。与 [DATA_STORAGE.md](./DATA_STORAGE.md)、[TECH_STACK.md](./TECH_STACK.md) 配套。
+在 Catalogue of Life 七界近乎完整覆盖（可达百万级节点）的前提下，保证浏览与管理可用的性能约定。与 [DATA_STORAGE.md](./DATA_STORAGE.md)、[TECH_STACK.md](./TECH_STACK.md) 配套。
 
 **本期不引入 Redis。** 性能首先靠访问模式与查询设计，而不是缓存中间件。
 
@@ -32,7 +32,7 @@
 | locale | 列表/详情俗名与介绍：请求语言 → 英语 → 学名 |
 | 公开缓存 | 只读 `/api/taxa/**` 可配置短 TTL `Cache-Control`（`app.cache.public-max-age-seconds`） |
 | 「所有后代」统计/导出 | 异步或管理端任务，禁止同步堵在页面请求 |
-| `view=simple` | 子节点通过冗余列 `simple_parent_id`（最近林奈七级祖先）索引查询；导入/写路径维护；启动时对旧数据可回填 |
+| `view=simple` | 子节点通过冗余列 `simple_parent_id`（最近林奈七级祖先）索引查询；导入/写路径维护；启动时对旧数据可回填。缺下一档时收入该档统一「未分类」虚拟节点（负 id，不入库） |
 
 **列表 / children 仅包含瘦字段**，例如：
 
@@ -78,7 +78,7 @@
 | 访问模式 | 手段 |
 | --- | --- |
 | 按父节点拉子节点 | `INDEX(parent_id, …)` |
-| `view=simple` 子节点 | `INDEX(simple_parent_id)` + 林奈七级 `rank` 过滤 |
+| `view=simple` 子节点 | `INDEX(simple_parent_id)` + **下一档**林奈阶元过滤；更深阶元进未分类目录 |
 | 学名搜索 | `scientific_name` 索引（或前缀/全文策略按实现选定） |
 | 俗名搜索 | `taxon_i18n(locale, common_name)` 相关索引 |
 | 详情 | 主键查询 |

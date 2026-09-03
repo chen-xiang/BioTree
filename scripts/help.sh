@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 常用脚本索引（仅打印帮助）
+# BioTree - Script index (prints help only)
 # Author: chen-xiang
 # Created: 2026-08-31
-# Updated: 2026-09-01 说明导入与 Web 启动分离
-# Updated: 2026-09-01 启动脚本加 start- 前缀
-# Updated: 2026-09-01 说明 Windows bat 结束后 pause
-# 用法：./scripts/help.sh
+# Updated: 2026-09-01 Document that import is separate from the web process
+# Updated: 2026-09-01 Prefix launcher scripts with start-
+# Updated: 2026-09-01 Note that Windows bats pause when they finish
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/help.sh
 # =============================================================================
 
 cat <<'EOF'

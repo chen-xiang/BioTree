@@ -12,12 +12,14 @@
  * Updated: 2026-09-01 高亮限制在父级竖线内侧
  * Updated: 2026-09-01 收紧展开箭头两侧空隙
  * Updated: 2026-09-01 节点行之间增加细间距
+ * Updated: 2026-09-03 未分类目录不按学名斜体
  */
 <script setup lang="ts">
 import { inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TaxonListItem, TaxonView } from '@/api/taxon'
 import { TAXON_TREE_SCROLL_ROOT, useTaxonChildren } from '@/composables/useTaxonChildren'
+import { isUnclassifiedId } from '@/domain/unclassified'
 import { rankLabel } from '@/utils/apiError'
 
 const props = defineProps<{
@@ -147,8 +149,10 @@ onBeforeUnmount(() => {
     >
       <span class="chevron" :class="{ open: expanded, hidden: !node.hasChildren }">▸</span>
       <span class="names">
-        <strong>{{ node.scientificName }}</strong>
-        <em v-if="node.commonName">{{ node.commonName }}</em>
+        <strong :class="{ bucket: node.placeholder || isUnclassifiedId(node.id) }">
+          {{ node.placeholder || isUnclassifiedId(node.id) ? t('browse.unclassified') : node.scientificName }}
+        </strong>
+        <em v-if="node.commonName && !node.placeholder && !isUnclassifiedId(node.id)">{{ node.commonName }}</em>
       </span>
       <span class="rank">{{ rankLabel(node.rank) }}</span>
     </button>
@@ -246,6 +250,12 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.names strong.bucket {
+  font-style: normal;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
 }
 
 .names em {

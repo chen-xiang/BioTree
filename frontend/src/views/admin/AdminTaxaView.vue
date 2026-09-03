@@ -9,6 +9,7 @@
  * Updated: 2026-08-31 搜索导航、面包屑、任意父移动、图注更新
  * Updated: 2026-08-31 完整阶元管理（view=full）与中间级等级
  * Updated: 2026-09-01 列表行与预览开关对齐标本台账风格
+ * Updated: 2026-09-03 七级预览中的未分类目录不可编辑
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -34,6 +35,7 @@ import BtInput from '@/components/ui/BtInput.vue'
 import BtPagination from '@/components/ui/BtPagination.vue'
 import BtSelect from '@/components/ui/BtSelect.vue'
 import BtTextarea from '@/components/ui/BtTextarea.vue'
+import { isUnclassifiedId } from '@/domain/unclassified'
 import { TAXON_RANK_ORDER } from '@/domain/ranks'
 import { useLocaleStore } from '@/stores/locale'
 import { useToastStore } from '@/stores/toast'
@@ -115,7 +117,12 @@ async function jumpToCrumb(index: number) {
 async function enterChild(item: TaxonListItem) {
   trail.value = [
     ...trail.value,
-    { id: item.id, label: item.commonName || item.scientificName },
+    {
+      id: item.id,
+      label: item.placeholder || isUnclassifiedId(item.id)
+        ? t('browse.unclassified')
+        : item.commonName || item.scientificName,
+    },
   ]
   editing.value = null
   await loadList(0)
@@ -140,6 +147,7 @@ async function hydrateEditing(detail: TaxonDetail) {
 }
 
 async function startEdit(id: number) {
+  if (isUnclassifiedId(id)) return
   try {
     const detail = await fetchTaxonDetail(id, apiLocale.value, undefined, ADMIN_VIEW_FULL)
     await hydrateEditing(detail)
@@ -292,6 +300,7 @@ const debouncedMoveSearch = debounce(() => {
 }, 320)
 
 function askDeleteTaxon(id: number) {
+  if (isUnclassifiedId(id)) return
   confirmKind.value = 'taxon'
   confirmTargetId.value = id
   confirmOpen.value = true
@@ -397,7 +406,15 @@ onMounted(async () => {
 })
 
 watch(apiLocale, () => loadList(listPage.value))
-watch(previewSimple, () => loadList(0))
+watch(previewSimple, (on) => {
+  if (!on) {
+    trail.value = trail.value.filter((crumb) => crumb.id == null || !isUnclassifiedId(crumb.id))
+    if (trail.value.length === 0) {
+      trail.value = [{ id: null, label: t('admin.root') }]
+    }
+  }
+  void loadList(0)
+})
 watch(searchQuery, () => debouncedAdminSearch())
 watch(moveQuery, () => debouncedMoveSearch())
 </script>
@@ -450,15 +467,19 @@ watch(moveQuery, () => debouncedMoveSearch())
           <li v-for="item in items" :key="item.id">
             <div class="item-main">
               <button type="button" class="linkish" @click="startEdit(item.id)">
-                <strong>{{ item.scientificName }}</strong>
-                <span>{{ item.commonName || rankLabel(item.rank) }}</span>
+                <strong>{{ item.placeholder ? t('browse.unclassified') : item.scientificName }}</strong>
+                <span>{{ item.placeholder ? rankLabel(item.rank) : item.commonName || rankLabel(item.rank) }}</span>
               </button>
             </div>
             <div class="item-actions">
               <BtButton variant="ghost" @click="enterChild(item)">
                 {{ t('admin.enter') }}
               </BtButton>
-              <BtButton variant="danger" @click="askDeleteTaxon(item.id)">{{ t('admin.delete') }}</BtButton>
+              <BtButton
+                v-if="!item.placeholder"
+                variant="danger"
+                @click="askDeleteTaxon(item.id)"
+              >{{ t('admin.delete') }}</BtButton>
             </div>
           </li>
         </ul>

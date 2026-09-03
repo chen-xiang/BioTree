@@ -2,7 +2,7 @@ spring:
   application:
     name: biotree
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/biotree?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8&serverTimezone=UTC
+    url: jdbc:mysql://127.0.0.1:3306/biotree?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8&serverTimezone=UTC&rewriteBatchedStatements=true&useServerPrepStmts=false
     username: biotree
     password: biotree
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -70,14 +70,28 @@ app:
     resume: true
     kingdoms:
       - Animalia
+      - Archaea
+      - Bacteria
+      - Chromista
+      - Fungi
       - Plantae
+      - Protozoa
+      # CoL 现行原核界名（包内已不用 Bacteria/Archaea）
+      - Bacillati
+      - Fusobacteriati
+      - Pseudomonadati
+      - Thermotogati
+      - Methanobacteriati
+      - Nanobdellati
+      - Promethearchaeati
+      - Thermoproteati
     max-per-rank: 0
     import-vernaculars: true
     import-synonyms: true
     import-descriptions: true
     import-distributions: true
     import-media: true
-    commit-batch-size: 500
+    commit-batch-size: 2000
     # full=含中间级；legacy7=仅林奈七级
     rank-mode: full
   cache:

@@ -1,10 +1,11 @@
 @echo off
 rem =============================================================================
-rem BioTree - 解析 JDK 21 并写入当前会话 JAVA_HOME / PATH
+rem BioTree - Resolve JDK 21 and set JAVA_HOME / PATH for this session
 rem Author: chen-xiang
 rem Created: 2026-09-01
-rem Updated: 2026-09-01 单独双击时结束后 pause
-rem 用法：由其它 scripts\*.bat 通过 call 调用（勿单独 setlocal，以便变量回传）
+rem Updated: 2026-09-01 Pause when double-clicked on its own
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: called from other scripts\*.bat via call (do not setlocal here, so vars propagate)
 rem =============================================================================
 
 set "EXITCODE=0"

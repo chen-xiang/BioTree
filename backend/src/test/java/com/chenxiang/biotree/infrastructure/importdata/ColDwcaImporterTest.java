@@ -5,11 +5,16 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 DwC 描述/分布/媒体与命名学字段
  * Updated: 2026-09-01 覆盖同父同名属在同一批次中的合并
+ * Updated: 2026-09-02 覆盖 replace 时旧 RANK_SPECIES 断点不得跳过界到属
+ * Updated: 2026-09-02 覆盖 keyset 多页落库
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.chenxiang.biotree.api.common.BusinessException;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -37,6 +42,9 @@ class ColDwcaImporterTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ImportCheckpointRepository checkpointRepository;
 
     @TempDir
     Path tempDir;
@@ -113,6 +121,133 @@ class ColDwcaImporterTest {
         Integer meta = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM import_dataset_meta WHERE source_key = 'col'", Integer.class);
         assertEquals(1, meta);
+    }
+
+    @Test
+    void replaceShouldIgnoreStaleSpeciesCheckpointAndInsertKingdomRoots() throws Exception {
+        Path zip = tempDir.resolve("stale_checkpoint_dwca.zip");
+        writeFixture(zip);
+        checkpointRepository.upsert("col", "RANK_SPECIES", 553991, null, "stale");
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(true);
+        properties.setResume(false);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(false);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setCommitBatchSize(50);
+        properties.setKingdoms(List.of("Animalia", "Plantae"));
+        properties.setRankMode("full");
+
+        importer.importArchive(zip, properties);
+
+        Integer kingdomRoots = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'KINGDOM' AND parent_id IS NULL
+                """,
+                Integer.class);
+        assertEquals(2, kingdomRoots);
+
+        Integer orphanSpecies = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND parent_id IS NULL
+                """,
+                Integer.class);
+        assertEquals(0, orphanSpecies);
+
+        Integer speciesWithParent = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND parent_id IS NOT NULL
+                """,
+                Integer.class);
+        assertEquals(1, speciesWithParent);
+    }
+
+    @Test
+    void resumeWithoutKingdomsShouldFailFast() throws Exception {
+        Path zip = tempDir.resolve("resume_guard_dwca.zip");
+        writeFixture(zip);
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
+        jdbcTemplate.update("DELETE FROM taxon_media");
+        jdbcTemplate.update("DELETE FROM taxon_distribution");
+        jdbcTemplate.update("DELETE FROM taxon_i18n");
+        jdbcTemplate.update("DELETE FROM taxon_synonym");
+        jdbcTemplate.update("DELETE FROM taxon");
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
+        checkpointRepository.upsert("col", "RANK_SPECIES", 100, null, "broken");
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(false);
+        properties.setResume(true);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(false);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setKingdoms(List.of("Animalia"));
+        properties.setRankMode("full");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> importer.importArchive(zip, properties));
+        assertTrue(ex.getMessage().contains("no kingdoms"));
+    }
+
+    @Test
+    void synonymWithoutKingdomShouldStillImport() throws Exception {
+        Path zip = tempDir.resolve("empty_kingdom_synonym.zip");
+        writeEmptyKingdomSynonymFixture(zip);
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(true);
+        properties.setResume(false);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(true);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setCommitBatchSize(50);
+        properties.setKingdoms(List.of("Animalia"));
+        properties.setRankMode("full");
+
+        ColDwcaImporter.ImportStats stats = importer.importArchive(zip, properties);
+        assertTrue(stats.synonymCount() >= 1);
+        Integer synonyms = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM taxon_synonym", Integer.class);
+        assertEquals(1, synonyms);
+    }
+
+    @Test
+    void keysetPagingShouldInsertAllSpeciesAcrossPages() throws Exception {
+        Path zip = tempDir.resolve("keyset_dwca.zip");
+        writeManySpeciesFixture(zip, 60);
+
+        ImportProperties properties = new ImportProperties();
+        properties.setReplace(true);
+        properties.setResume(false);
+        properties.setImportVernaculars(false);
+        properties.setImportSynonyms(false);
+        properties.setImportDescriptions(false);
+        properties.setImportDistributions(false);
+        properties.setImportMedia(false);
+        properties.setCommitBatchSize(50);
+        properties.setKingdoms(List.of("Animalia"));
+        properties.setRankMode("full");
+
+        importer.importArchive(zip, properties);
+
+        Integer species = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'SPECIES'", Integer.class);
+        assertEquals(60, species);
+        Integer orphanSpecies = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND parent_id IS NULL
+                """,
+                Integer.class);
+        assertEquals(0, orphanSpecies);
     }
 
     @Test
@@ -229,6 +364,54 @@ class ColDwcaImporterTest {
             zipOut.closeEntry();
             zipOut.putNextEntry(new ZipEntry("eml.xml"));
             zipOut.write(eml.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+        }
+    }
+
+    private static void writeEmptyKingdomSynonymFixture(Path zip) throws IOException {
+        String taxonHeader =
+                "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
+        String taxa = taxonHeader
+                + "N\t\t\t\t\t\taccepted\tkingdom\tAnimalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "PH1\tN\t\t\t\t\taccepted\tphylum\tChordata\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "CL1\tPH1\t\t\t\t\taccepted\tclass\tMammalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "OR1\tCL1\t\t\t\t\taccepted\torder\tPrimates\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "FA1\tOR1\t\t\t\t\taccepted\tfamily\tHominidae\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "GE1\tFA1\t\t\t\t\taccepted\tgenus\tHomo\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n"
+                + "SP1\tGE1\t\t\t\t\taccepted\tspecies\tHomo sapiens\t\t\tHomo\t\tsapiens\t\t\t\t\t\t\tAnimalia\n"
+                + "SYN1\t\tSP1\t\t\t\tsynonym\tspecies\tHomo sapien\t\t\tHomo\t\tsapien\t\t\t\t\t\t\t\n";
+        try (OutputStream out = Files.newOutputStream(zip);
+                ZipOutputStream zipOut = new ZipOutputStream(out)) {
+            zipOut.putNextEntry(new ZipEntry("Taxon.tsv"));
+            zipOut.write(taxa.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+        }
+    }
+
+    private static void writeManySpeciesFixture(Path zip, int speciesCount) throws IOException {
+        String taxonHeader =
+                "dwc:taxonID\tdwc:parentNameUsageID\tdwc:acceptedNameUsageID\ta\tb\tc\tdwc:taxonomicStatus\tdwc:taxonRank\tdwc:scientificName\tdwc:scientificNameAuthorship\tcol:notho\tdwc:genericName\tdwc:infragenericEpithet\tdwc:specificEpithet\tdwc:infraspecificEpithet\tdwc:cultivarEpithet\tdwc:nameAccordingTo\tdwc:namePublishedIn\tdwc:nomenclaturalCode\tdwc:nomenclaturalStatus\tdwc:kingdom\n";
+        StringBuilder taxa = new StringBuilder(taxonHeader);
+        taxa.append("N\t\t\t\t\t\taccepted\tkingdom\tAnimalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("PH1\tN\t\t\t\t\taccepted\tphylum\tChordata\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("CL1\tPH1\t\t\t\t\taccepted\tclass\tMammalia\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("OR1\tCL1\t\t\t\t\taccepted\torder\tPrimates\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("FA1\tOR1\t\t\t\t\taccepted\tfamily\tHominidae\t\t\t\t\t\t\t\t\t\t\t\tAnimalia\n");
+        taxa.append("GE1\tFA1\t\t\t\t\taccepted\tgenus\tHomo\t\t\tHomo\t\t\t\t\t\t\t\t\tAnimalia\n");
+        for (int i = 1; i <= speciesCount; i++) {
+            String epithet = "spec" + i;
+            taxa.append("SP")
+                    .append(i)
+                    .append("\tGE1\t\t\t\t\taccepted\tspecies\tHomo ")
+                    .append(epithet)
+                    .append("\t\t\tHomo\t\t")
+                    .append(epithet)
+                    .append("\t\t\t\t\t\t\tAnimalia\n");
+        }
+        try (OutputStream out = Files.newOutputStream(zip);
+                ZipOutputStream zipOut = new ZipOutputStream(out)) {
+            zipOut.putNextEntry(new ZipEntry("Taxon.tsv"));
+            zipOut.write(taxa.toString().getBytes(StandardCharsets.UTF_8));
             zipOut.closeEntry();
         }
     }

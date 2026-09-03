@@ -2,12 +2,13 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 rem =============================================================================
-rem BioTree - 代码行统计（源码，不含依赖与构建产物）
+rem BioTree - Count source lines (excludes deps and build output)
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\count-loc.bat
-rem 说明：优先使用 cloc；若无则用 PowerShell 按扩展名粗算
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\count-loc.bat
+rem Note: prefers cloc; falls back to a PowerShell per-extension count
 rem =============================================================================
 
 set "EXITCODE=0"

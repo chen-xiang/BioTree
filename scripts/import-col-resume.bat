@@ -2,15 +2,16 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 rem =============================================================================
-rem BioTree - Catalogue of Life 断点续跑（不 replace、不提示清空）
+rem BioTree - Catalogue of Life resume import (no replace, no wipe prompt)
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
-rem Updated: 2026-09-01 启动前解析 JDK 21
-rem Updated: 2026-09-01 改为 gradle importCol，不启动 Web
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\import-col-resume.bat
-rem 前置：已有 checkpoint；DwC-A 包存在；勿与 replace=true 混用
+rem Updated: 2026-08-31 Enable full ranks and DwC extension import
+rem Updated: 2026-09-01 Resolve JDK 21 before start
+rem Updated: 2026-09-01 Switch to gradle importCol, no web server
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\import-col-resume.bat
+rem Requires: an existing checkpoint; DwC-A zip present; do not mix with replace=true
 rem =============================================================================
 
 set "EXITCODE=0"

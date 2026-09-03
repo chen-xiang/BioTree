@@ -2,12 +2,13 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 从离线 openapi.yaml 生成前端类型 schema.d.ts
+rem BioTree - Generate frontend schema.d.ts from offline openapi.yaml
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\openapi-generate.bat
-rem 可选：scripts\openapi-generate.bat live  （需后端已启动）
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\openapi-generate.bat
+rem Optional: scripts\openapi-generate.bat live  (backend must be running)
 rem =============================================================================
 
 set "EXITCODE=0"

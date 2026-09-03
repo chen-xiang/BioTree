@@ -2,13 +2,14 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 启动前端开发服务器（Vite）
+rem BioTree - Start the frontend dev server (Vite)
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 脚本改名为 start-web-dev
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：双击或在仓库根目录执行 scripts\start-web-dev.bat
-rem 前置：Node.js 20+、pnpm
+rem Updated: 2026-09-01 Rename script to start-web-dev
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: double-click, or run scripts\start-web-dev.bat from the repo root
+rem Requires: Node.js 20+, pnpm
 rem =============================================================================
 
 set "EXITCODE=0"

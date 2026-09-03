@@ -6,6 +6,7 @@
  * Updated: 2026-08-31 增加异名列表
  * Updated: 2026-08-31 配图首屏预览 + mediaTotal
  * Updated: 2026-08-31 DwC 命名学元数据、分布、多语言俗名
+ * Updated: 2026-09-03 simple 视图未分类占位节点
  */
 package com.chenxiang.biotree.api.taxon;
 
@@ -37,5 +38,6 @@ public record TaxonDetailDto(
         List<TaxonVernacularDto> vernaculars,
         List<TaxonDistributionDto> distributions,
         int directChildCount,
-        Long nearestSimpleAncestorId) {
+        Long nearestSimpleAncestorId,
+        boolean placeholder) {
 }

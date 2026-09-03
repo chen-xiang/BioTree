@@ -5,6 +5,7 @@
  * Created: 2026-08-31
  * Updated: 2026-08-31 增加根节点分页与学名/俗名搜索
  * Updated: 2026-08-31 前缀优先搜索、多 locale、路径子树查询
+ * Updated: 2026-09-03 simple 视图按单一林奈阶元查询
  */
 package com.chenxiang.biotree.infrastructure.persistence;
 
@@ -38,11 +39,21 @@ public interface TaxonRepository extends JpaRepository<Taxon, Long> {
 
     Page<Taxon> findBySimpleParentIsNullAndRankIn(Collection<TaxonRank> ranks, Pageable pageable);
 
+    Page<Taxon> findBySimpleParentIdAndRank(Long simpleParentId, TaxonRank rank, Pageable pageable);
+
+    Page<Taxon> findBySimpleParentIsNullAndRank(TaxonRank rank, Pageable pageable);
+
     long countBySimpleParentIdAndRankIn(Long simpleParentId, Collection<TaxonRank> ranks);
 
     long countBySimpleParentIsNullAndRankIn(Collection<TaxonRank> ranks);
 
+    long countBySimpleParentIdAndRank(Long simpleParentId, TaxonRank rank);
+
+    long countBySimpleParentIsNullAndRank(TaxonRank rank);
+
     boolean existsBySimpleParentIdAndRankIn(Long simpleParentId, Collection<TaxonRank> ranks);
+
+    boolean existsBySimpleParentIsNullAndRankIn(Collection<TaxonRank> ranks);
 
     boolean existsByParentIdAndScientificNameIgnoreCase(Long parentId, String scientificName);
 

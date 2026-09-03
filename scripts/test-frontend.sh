@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 前端 typecheck / lint / unit test / build
+# BioTree - Frontend typecheck / lint / unit test / build
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/test-frontend.sh
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/test-frontend.sh
 # =============================================================================
 set -euo pipefail
 

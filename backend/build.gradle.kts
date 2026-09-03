@@ -44,4 +44,5 @@ tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("importCol") {
     description = "Run Catalogue of Life import without starting the web server"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.chenxiang.biotree.ImportApplication")
+    jvmArgs("-Xms1g", "-Xmx4g")
 }

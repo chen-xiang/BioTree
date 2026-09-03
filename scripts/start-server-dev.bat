@@ -2,15 +2,16 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 启动后端开发服务（Spring Boot）
+rem BioTree - Start the backend dev server (Spring Boot)
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-09-01 启动前解析 JDK 21
-rem Updated: 2026-09-01 提示导入走独立脚本
-rem Updated: 2026-09-01 脚本改名为 start-server-dev
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：双击或在仓库根目录执行 scripts\start-server-dev.bat
-rem 前置：JDK 21、MySQL（库 biotree，见 application.yml）
+rem Updated: 2026-09-01 Resolve JDK 21 before start
+rem Updated: 2026-09-01 Point import to standalone scripts
+rem Updated: 2026-09-01 Rename script to start-server-dev
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: double-click, or run scripts\start-server-dev.bat from the repo root
+rem Requires: JDK 21, MySQL (database biotree, see application.yml)
 rem =============================================================================
 
 set "EXITCODE=0"

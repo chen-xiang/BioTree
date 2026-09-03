@@ -8,6 +8,7 @@
  * Updated: 2026-08-31 Add load-more and move copy
  * Updated: 2026-09-01 Align home and browse copy with the specimen-plate UI
  * Updated: 2026-09-01 Tree auto-load copy
+ * Updated: 2026-09-03 Unclassified folder copy
  */
 export default {
   common: {
@@ -54,6 +55,8 @@ export default {
     distributions: 'Distribution',
     publishedIn: 'Published in',
     jumpedToVisibleAncestor: 'Not visible in simple view — jumped to the nearest Linnaean ancestor',
+    unclassified: 'Unclassified',
+    unclassifiedHint: 'Taxa missing this rank are grouped here so they are not listed beside the previous rank.',
   },
   theme: {
     light: 'Light',

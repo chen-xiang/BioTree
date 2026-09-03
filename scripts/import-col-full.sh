@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - Catalogue of Life 全量导入（动物界 + 植物界）
+# BioTree - Catalogue of Life full import (CoL seven kingdoms)
 # Author: chen-xiang
 # Created: 2026-08-31
-# Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
-# Updated: 2026-09-01 改为 gradle importCol，不启动 Web
-# 用法：./scripts/import-col-full.sh
-# 前置：JDK 21、MySQL（库 biotree）、网络（若需下载数据包）
+# Updated: 2026-08-31 Enable full ranks and DwC extension import
+# Updated: 2026-09-01 Switch to gradle importCol, no web server
+# Updated: 2026-09-01 Default import scope is CoL seven kingdoms
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/import-col-full.sh
+# Requires: JDK 21, MySQL (database biotree), network if the archive must be downloaded
 # =============================================================================
 set -euo pipefail
 

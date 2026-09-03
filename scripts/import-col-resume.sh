@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - Catalogue of Life 断点续跑（不 replace）
+# BioTree - Catalogue of Life resume import (no replace)
 # Author: chen-xiang
 # Created: 2026-08-31
-# Updated: 2026-08-31 显式开启完整阶元与 DwC 扩展导入
-# Updated: 2026-09-01 改为 gradle importCol，不启动 Web
-# 用法：./scripts/import-col-resume.sh
-# 前置：已有 checkpoint；DwC-A 包存在；勿与 replace=true 混用
+# Updated: 2026-08-31 Enable full ranks and DwC extension import
+# Updated: 2026-09-01 Switch to gradle importCol, no web server
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/import-col-resume.sh
+# Requires: an existing checkpoint; DwC-A zip present; do not mix with replace=true
 # =============================================================================
 set -euo pipefail
 

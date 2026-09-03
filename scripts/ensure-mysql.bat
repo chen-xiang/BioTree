@@ -1,10 +1,11 @@
 @echo off
 rem =============================================================================
-rem BioTree - 检查本机 MySQL 是否在 127.0.0.1:3306 监听
+rem BioTree - Check that MySQL is listening on 127.0.0.1:3306
 rem Author: chen-xiang
 rem Created: 2026-09-01
-rem Updated: 2026-09-01 单独双击时结束后 pause
-rem 用法：由其它 scripts\*.bat 通过 call 调用
+rem Updated: 2026-09-01 Pause when double-clicked on its own
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: called from other scripts\*.bat via call
 rem =============================================================================
 
 set "EXITCODE=0"

@@ -9,6 +9,7 @@
  * Updated: 2026-08-31 移动端树/详情切换与配图加载更多
  * Updated: 2026-09-01 搜索改为下拉、详情改为标本卡、工作台分栏
  * Updated: 2026-09-01 浏览工作台单栏滚动，树滚动根提供给续页观察
+ * Updated: 2026-09-03 未分类目录详情与面包屑
  */
 import { computed, onMounted, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -33,6 +34,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useTaxonViewStore } from '@/stores/taxonView'
 import { useToastStore } from '@/stores/toast'
 import { messageFromApiError, rankLabel } from '@/utils/apiError'
+import { isUnclassifiedId } from '@/domain/unclassified'
 import { debounce } from '@/utils/debounce'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -102,6 +104,11 @@ const crumbTail = computed(() => {
   if (crumbsExpanded.value || crumbs.length <= 5) return []
   return crumbs.slice(-3)
 })
+function crumbLabel(crumb: { id: number; scientificName: string; commonName?: string | null }) {
+  if (isUnclassifiedId(crumb.id)) return t('browse.unclassified')
+  return crumb.commonName || crumb.scientificName
+}
+
 const crumbsCollapsed = computed(() => {
   const n = detail.value?.breadcrumbs?.length ?? 0
   return !crumbsExpanded.value && n > 5
@@ -138,7 +145,7 @@ async function loadDetail(id: number, syncRoute = true) {
     gallery.value = [...(detail.value.media ?? [])]
     mediaTotal.value = detail.value.mediaTotal ?? gallery.value.length
     const anchor = detail.value.nearestSimpleAncestorId
-    if (treeView.value === 'simple' && anchor != null && anchor !== id) {
+    if (treeView.value === 'simple' && !detail.value.placeholder && anchor != null && anchor !== id) {
       toast.push(t('browse.jumpedToVisibleAncestor'), 'ok')
       await loadDetail(anchor, true)
       return
@@ -152,7 +159,7 @@ async function loadDetail(id: number, syncRoute = true) {
 }
 
 async function loadMoreMedia() {
-  if (!detail.value || !hasMoreMedia.value || loadingMoreMedia.value) return
+  if (!detail.value || detail.value.placeholder || !hasMoreMedia.value || loadingMoreMedia.value) return
   loadingMoreMedia.value = true
   try {
     const page = Math.floor(gallery.value.length / MEDIA_PAGE)
@@ -395,7 +402,7 @@ onBeforeUnmount(() => {
             <template v-for="(crumb, index) in crumbHead" :key="`h-${crumb.id}`">
               <span v-if="index > 0" class="sep" aria-hidden="true">›</span>
               <RouterLink :to="{ name: 'browse', params: { id: String(crumb.id) } }">
-                {{ crumb.commonName || crumb.scientificName }}
+                {{ crumbLabel(crumb) }}
               </RouterLink>
             </template>
             <template v-if="crumbsCollapsed">
@@ -405,13 +412,15 @@ onBeforeUnmount(() => {
             <template v-for="crumb in crumbTail" :key="`t-${crumb.id}`">
               <span class="sep" aria-hidden="true">›</span>
               <RouterLink :to="{ name: 'browse', params: { id: String(crumb.id) } }">
-                {{ crumb.commonName || crumb.scientificName }}
+                {{ crumbLabel(crumb) }}
               </RouterLink>
             </template>
           </nav>
           <header class="plate">
             <p class="stamp">{{ rankLabel(detail.rank) }}</p>
-            <h2 class="sci">{{ detail.scientificName }}</h2>
+            <h2 class="sci" :class="{ bucket: detail.placeholder }">
+              {{ detail.placeholder ? t('browse.unclassified') : detail.scientificName }}
+            </h2>
             <p v-if="authorshipLine" class="authorship">{{ authorshipLine }}</p>
             <p v-if="detail.commonName" class="common">{{ detail.commonName }}</p>
             <p class="meta">{{ t('browse.childrenCount', { n: detail.childCount }) }}</p>
@@ -651,6 +660,12 @@ h1 {
   font-style: italic;
   font-weight: 650;
   line-height: 1.2;
+}
+
+.sci.bucket {
+  font-style: normal;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
 }
 
 .authorship {

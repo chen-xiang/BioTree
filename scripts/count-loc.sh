@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 代码行统计（源码，不含依赖与构建产物）
+# BioTree - Count source lines (excludes deps and build output)
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/count-loc.sh
-# 说明：优先使用 cloc；若无则用 find/wc 按扩展名粗算
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/count-loc.sh
+# Note: prefers cloc; falls back to find/wc per-extension counts
 # =============================================================================
 set -euo pipefail
 

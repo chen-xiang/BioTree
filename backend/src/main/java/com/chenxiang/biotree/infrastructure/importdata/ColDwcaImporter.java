@@ -7,6 +7,10 @@
  * Updated: 2026-08-31 小事务断点续跑与异名导入
  * Updated: 2026-08-31 暂存表流式导入，去掉全量 nodes Map
  * Updated: 2026-09-01 同批同父同学名合并，避免 uk_taxon_parent_name 冲突
+ * Updated: 2026-09-01 界名过滤改为不区分大小写
+ * Updated: 2026-09-02 replace/非续跑不再沿用旧 checkpoint 跳过高等级
+ * Updated: 2026-09-02 落库改为 keyset 分页、少写 checkpoint，MySQL 导入期间挂起全文索引
+ * Updated: 2026-09-02 续跑/落库校验、表头解析、空界异名、按 external_id 回查主键
  */
 package com.chenxiang.biotree.infrastructure.importdata;
 
@@ -23,7 +27,6 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
@@ -37,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -55,6 +59,7 @@ public class ColDwcaImporter {
 
     private static final Logger log = LoggerFactory.getLogger(ColDwcaImporter.class);
     private static final int BATCH_LOG_EVERY = 50_000;
+    private static final int CHECKPOINT_EVERY = 50_000;
     private static final String PHASE_STAGE = "STAGE";
     private static final String PHASE_RANK_PREFIX = "RANK_";
     private static final String PHASE_VERNACULARS = "VERNACULARS";
@@ -69,6 +74,8 @@ public class ColDwcaImporter {
     private final TransactionTemplate transactionTemplate;
     private final ImportCheckpointRepository checkpointRepository;
     private final ColDwcaContentImporter contentImporter;
+    private final Map<String, Long> kingdomIdCache = new HashMap<>();
+    private Boolean mysql;
 
     public ColDwcaImporter(
             JdbcTemplate jdbcTemplate,
@@ -85,7 +92,7 @@ public class ColDwcaImporter {
         if (dwcaZip == null || !dwcaZip.toFile().isFile()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "DwC-A zip not found");
         }
-        Set<String> kingdoms = new HashSet<>();
+        Set<String> kingdoms = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (String k : properties.getKingdoms()) {
             if (StringUtils.hasText(k)) {
                 kingdoms.add(k.trim());
@@ -94,6 +101,7 @@ public class ColDwcaImporter {
         if (kingdoms.isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one kingdom is required");
         }
+        kingdomIdCache.clear();
 
         String jobKey = StringUtils.hasText(properties.getJobKey()) ? properties.getJobKey() : SOURCE_COL;
         Optional<ImportCheckpointRepository.Checkpoint> existing = checkpointRepository.find(jobKey);
@@ -112,6 +120,7 @@ public class ColDwcaImporter {
                     jobKey,
                     existing.get().phase(),
                     existing.get().processedCount());
+            assertKingdomsPresent("Cannot resume COL import: no kingdoms in database, run replace=true");
         }
 
         int batchSize = Math.max(50, properties.getCommitBatchSize());
@@ -120,8 +129,12 @@ public class ColDwcaImporter {
             rankCounters.put(rank, new AtomicInteger());
         }
 
+        boolean droppedFulltext = false;
         try (ZipFile zip = new ZipFile(dwcaZip.toFile())) {
-            String phase = existing.map(ImportCheckpointRepository.Checkpoint::phase).orElse(PHASE_STAGE);
+            // replace 会清库但 existing 仍是删除前读到的旧断点；非续跑必须从头落库
+            String phase = resuming
+                    ? existing.map(ImportCheckpointRepository.Checkpoint::phase).orElse(PHASE_STAGE)
+                    : PHASE_STAGE;
             if (phaseOrder(phase) <= phaseOrder(PHASE_STAGE) || !stagingHasTaxa()) {
                 checkpointRepository.upsert(jobKey, PHASE_STAGE, 0, null, "streaming");
                 StageCounts stageCounts = stageFromArchive(
@@ -135,13 +148,20 @@ public class ColDwcaImporter {
                     rankCounters.get(e.getKey()).set(e.getValue());
                 }
                 log.info(
-                        "Staging finished taxa={} synonyms={} edges={}",
+                        "Staging finished taxa={} synonyms={} edges={} byRank={}",
                         stageCounts.taxonCount(),
                         stageCounts.synonymCount(),
-                        stageCounts.edgeCount());
+                        stageCounts.edgeCount(),
+                        stageCounts.byRank());
+                if (rankCounters.get(TaxonRank.KINGDOM).get() == 0) {
+                    throw new BusinessException(
+                            ErrorCode.BAD_REQUEST, "Staging produced no kingdoms; check app.import.kingdoms");
+                }
             } else {
                 fillRankCountersFromStaging(rankCounters);
             }
+
+            droppedFulltext = suspendMysqlFulltextIndexes();
 
             Map<String, Long> externalToId = new HashMap<>();
             preloadExistingExternalIds(externalToId);
@@ -160,6 +180,7 @@ public class ColDwcaImporter {
                 checkpointRepository.upsert(jobKey, rankPhase, 0, rankCounters.get(rank).get(), null);
                 insertRankFromStaging(rank, externalToId, idToPath, idToRank, parentNameToId, jobKey, batchSize);
             }
+            validateImportedHierarchy();
 
             int vernacularCount = 0;
             if (properties.isImportVernaculars() && phaseOrder(phase) <= phaseOrder(PHASE_VERNACULARS)) {
@@ -238,6 +259,10 @@ public class ColDwcaImporter {
         } catch (IOException ex) {
             log.error("Failed to read DwC-A archive {}", dwcaZip, ex);
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Failed to read DwC-A archive");
+        } finally {
+            if (droppedFulltext) {
+                restoreMysqlFulltextIndexes();
+            }
         }
     }
 
@@ -265,9 +290,12 @@ public class ColDwcaImporter {
 
         try (BufferedReader reader =
                 new BufferedReader(new InputStreamReader(zip.getInputStream(taxonEntry), StandardCharsets.UTF_8), 1 << 20)) {
-            if (reader.readLine() == null) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Taxon.tsv is empty");
             }
+            Map<String, Integer> header = DwcaTsvHeaders.parse(headerLine);
+            boolean headerAware = header.containsKey("taxonid") && header.containsKey("taxonrank");
             String line;
             long scanned = 0;
             while ((line = reader.readLine()) != null) {
@@ -276,43 +304,34 @@ public class ColDwcaImporter {
                     continue;
                 }
                 String[] cols = line.split("\t", -1);
-                if (cols.length < 21) {
+                if (!headerAware && cols.length < 21) {
                     continue;
                 }
-                String taxonId = cols[0];
-                String parentId = emptyToNull(cols[1]);
-                String acceptedId = emptyToNull(cols[2]);
-                String status = cols[6];
-                String rankRaw = cols[7];
-                String scientificName = cols[8];
-                String authorship = cols.length > 9 ? emptyToNull(cols[9]) : null;
-                String genericName = cols.length > 11 ? cols[11] : "";
-                String specificEpithet = cols.length > 13 ? cols[13] : "";
-                String infraspecificEpithet = cols.length > 14 ? cols[14] : "";
-                String nameAccordingTo = cols.length > 16 ? emptyToNull(cols[16]) : null;
-                String namePublishedIn = cols.length > 17 ? emptyToNull(cols[17]) : null;
-                String nomenclaturalCode = cols.length > 18 ? emptyToNull(cols[18]) : null;
-                String nomenclaturalStatus = cols.length > 19 ? emptyToNull(cols[19]) : null;
-                String kingdom = cols[20];
+                String taxonId = taxonField(cols, header, headerAware, 0, "taxonid", "id");
+                String parentId = taxonField(cols, header, headerAware, 1, "parentnameusageid", "parentid");
+                String acceptedId = taxonField(cols, header, headerAware, 2, "acceptednameusageid", "acceptedid");
+                String status = taxonField(cols, header, headerAware, 6, "taxonomicstatus", "status");
+                String rankRaw = taxonField(cols, header, headerAware, 7, "taxonrank", "rank");
+                String scientificName = taxonField(cols, header, headerAware, 8, "scientificname");
+                String authorship = taxonField(cols, header, headerAware, 9, "scientificnameauthorship");
+                String genericName = nz(taxonField(cols, header, headerAware, 11, "genericname"));
+                String specificEpithet = nz(taxonField(cols, header, headerAware, 13, "specificepithet"));
+                String infraspecificEpithet = nz(taxonField(cols, header, headerAware, 14, "infraspecificepithet"));
+                String nameAccordingTo = taxonField(cols, header, headerAware, 16, "nameaccordingto");
+                String namePublishedIn = taxonField(cols, header, headerAware, 17, "namepublishedin");
+                String nomenclaturalCode = taxonField(cols, header, headerAware, 18, "nomenclaturalcode");
+                String nomenclaturalStatus = taxonField(cols, header, headerAware, 19, "nomenclaturalstatus");
+                String kingdom = taxonField(cols, header, headerAware, 20, "kingdom");
+                if (!StringUtils.hasText(taxonId)) {
+                    continue;
+                }
 
                 boolean kingdomOk = StringUtils.hasText(kingdom) && kingdoms.contains(kingdom);
-                boolean isKingdomRow = "kingdom".equalsIgnoreCase(rankRaw)
+                boolean isKingdomRow = rankRaw != null
+                        && "kingdom".equalsIgnoreCase(rankRaw)
                         && kingdoms.contains(ColNameUtils.stripAuthorship(scientificName));
-                if (!kingdomOk && !isKingdomRow) {
-                    continue;
-                }
-                if (isKingdomRow && !StringUtils.hasText(kingdom)) {
-                    kingdom = ColNameUtils.stripAuthorship(scientificName);
-                }
-
-                edgeBatch.add(new Object[] {taxonId, parentId});
-                edgeCount.incrementAndGet();
-                if (edgeBatch.size() >= batchSize) {
-                    flushEdges(edgeBatch);
-                    edgeBatch = new ArrayList<>(batchSize);
-                }
-
-                if (!"accepted".equalsIgnoreCase(status)) {
+                boolean accepted = ColNameUtils.isAcceptedTaxonomicStatus(status);
+                if (!accepted) {
                     if (collectSynonyms
                             && acceptedId != null
                             && StringUtils.hasText(scientificName)
@@ -328,6 +347,19 @@ public class ColDwcaImporter {
                         }
                     }
                     continue;
+                }
+                if (!kingdomOk && !isKingdomRow) {
+                    continue;
+                }
+                if (isKingdomRow && !StringUtils.hasText(kingdom)) {
+                    kingdom = ColNameUtils.stripAuthorship(scientificName);
+                }
+
+                edgeBatch.add(new Object[] {taxonId, parentId});
+                edgeCount.incrementAndGet();
+                if (edgeBatch.size() >= batchSize) {
+                    flushEdges(edgeBatch);
+                    edgeBatch = new ArrayList<>(batchSize);
                 }
 
                 var rankOpt = ColNameUtils.mapRank(rankRaw, legacySeven);
@@ -430,7 +462,7 @@ public class ColDwcaImporter {
             String jobKey,
             int batchSize) {
         AtomicInteger inserted = new AtomicInteger();
-        int offset = 0;
+        String afterExternalId = "";
         Timestamp ts = Timestamp.from(Instant.now());
         while (true) {
             List<StagedTaxon> page = jdbcTemplate.query(
@@ -439,9 +471,9 @@ public class ColDwcaImporter {
                            scientific_name_authorship, taxon_rank_raw, scientific_name_verbatim,
                            name_published_in, name_according_to, nomenclatural_code, nomenclatural_status
                     FROM import_col_taxon
-                    WHERE taxon_rank = ?
+                    WHERE taxon_rank = ? AND external_id > ?
                     ORDER BY external_id
-                    LIMIT ? OFFSET ?
+                    LIMIT ?
                     """,
                     (rs, rowNum) -> new StagedTaxon(
                             rs.getString(1),
@@ -457,12 +489,12 @@ public class ColDwcaImporter {
                             rs.getString(11),
                             rs.getString(12)),
                     rank.name(),
-                    batchSize,
-                    offset);
+                    afterExternalId,
+                    batchSize);
             if (page.isEmpty()) {
                 break;
             }
-            offset += page.size();
+            afterExternalId = page.getLast().externalId();
             List<PendingInsert> pending = new ArrayList<>();
             Set<String> pendingUniqKeys = new HashSet<>();
             Map<String, List<String>> pendingAliases = new HashMap<>();
@@ -488,6 +520,7 @@ public class ColDwcaImporter {
                 attachPendingNameAliases(pendingAliases, parentNameToId, externalToId);
             }
         }
+        checkpointRepository.upsert(jobKey, PHASE_RANK_PREFIX + rank.name(), inserted.get(), null, null);
         log.info("Inserted rank={} rows={}", rank, inserted.get());
     }
 
@@ -513,7 +546,7 @@ public class ColDwcaImporter {
                     VALUES (?, ?, ?, ?, 0, TRUE, ?, ?, 'col-import', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
             jdbcTemplate.execute((java.sql.Connection connection) -> {
-                try (PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
                     for (PendingInsert item : pending) {
                         if (item.parentDbId() == null) {
                             ps.setNull(1, Types.BIGINT);
@@ -538,24 +571,26 @@ public class ColDwcaImporter {
                         ps.addBatch();
                     }
                     ps.executeBatch();
-                    List<Long> generatedIds = new ArrayList<>(pending.size());
-                    try (ResultSet keys = ps.getGeneratedKeys()) {
-                        while (keys.next()) {
-                            generatedIds.add(keys.getLong(1));
-                        }
-                    }
-                    if (generatedIds.size() != pending.size()) {
+                    Map<String, Long> insertedIds = loadIdsByExternal(
+                            connection,
+                            pending.stream().map(item -> item.row().externalId()).toList());
+                    if (insertedIds.size() != pending.size()) {
                         throw new BusinessException(
                                 ErrorCode.INTERNAL_ERROR,
-                                "Generated key count mismatch: expected "
+                                "Inserted key count mismatch: expected "
                                         + pending.size()
                                         + " got "
-                                        + generatedIds.size());
+                                        + insertedIds.size());
                     }
                     List<Object[]> pathUpdates = new ArrayList<>(pending.size());
-                    for (int i = 0; i < pending.size(); i++) {
-                        PendingInsert item = pending.get(i);
-                        long id = generatedIds.get(i);
+                    for (PendingInsert item : pending) {
+                        Long generatedId = insertedIds.get(item.row().externalId());
+                        if (generatedId == null) {
+                            throw new BusinessException(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Missing inserted id for external_id=" + item.row().externalId());
+                        }
+                        long id = generatedId;
                         Long parentDbId = item.parentDbId();
                         String path = parentDbId == null
                                 ? "/" + id + "/"
@@ -576,7 +611,9 @@ public class ColDwcaImporter {
                 return null;
             });
             int total = inserted.addAndGet(pending.size());
-            checkpointRepository.upsert(jobKey, PHASE_RANK_PREFIX + rank.name(), total, null, null);
+            if (total / CHECKPOINT_EVERY > (total - pending.size()) / CHECKPOINT_EVERY) {
+                checkpointRepository.upsert(jobKey, PHASE_RANK_PREFIX + rank.name(), total, null, null);
+            }
             if (total / BATCH_LOG_EVERY > (total - pending.size()) / BATCH_LOG_EVERY) {
                 log.info("Inserted {} taxa for rank {}", total, rank);
             }
@@ -626,16 +663,89 @@ public class ColDwcaImporter {
             cursor = lookupEdgeParent(cursor);
         }
         if (StringUtils.hasText(kingdom)) {
-            List<Long> ids = jdbcTemplate.query(
-                    """
-                    SELECT id FROM taxon
-                    WHERE taxon_rank = 'KINGDOM' AND LOWER(scientific_name) = LOWER(?)
-                    """,
-                    (rs, rowNum) -> rs.getLong(1),
-                    kingdom);
-            return ids.isEmpty() ? null : ids.getFirst();
+            return kingdomIdCache.computeIfAbsent(kingdom.toLowerCase(Locale.ROOT), this::lookupKingdomId);
         }
         return null;
+    }
+
+    private static Map<String, Long> loadIdsByExternal(java.sql.Connection connection, List<String> externalIds)
+            throws SQLException {
+        if (externalIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(externalIds.size(), "?"));
+        String sql = "SELECT external_id, id FROM taxon WHERE external_source = ? AND external_id IN ("
+                + placeholders
+                + ")";
+        Map<String, Long> ids = new HashMap<>();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, SOURCE_COL);
+            for (int i = 0; i < externalIds.size(); i++) {
+                ps.setString(i + 2, externalIds.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ids.put(rs.getString(1), rs.getLong(2));
+                }
+            }
+        }
+        return ids;
+    }
+
+    private void assertKingdomsPresent(String message) {
+        Integer kingdoms = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'KINGDOM'", Integer.class);
+        if (kingdoms == null || kingdoms == 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, message);
+        }
+    }
+
+    private void validateImportedHierarchy() {
+        assertKingdomsPresent("Import produced no kingdoms");
+        Integer species = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taxon WHERE taxon_rank = 'SPECIES'", Integer.class);
+        Integer orphanSpecies = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM taxon
+                WHERE taxon_rank = 'SPECIES' AND parent_id IS NULL
+                """,
+                Integer.class);
+        if (species != null && species > 0 && orphanSpecies != null && orphanSpecies == species) {
+            throw new BusinessException(
+                    ErrorCode.INTERNAL_ERROR, "All species are root nodes; hierarchy is broken");
+        }
+        if (orphanSpecies != null && orphanSpecies > 0) {
+            log.warn("Orphan species remain after rank insert count={}", orphanSpecies);
+        }
+    }
+
+    private static String taxonField(
+            String[] cols, Map<String, Integer> header, boolean headerAware, int fallbackIndex, String... names) {
+        if (headerAware) {
+            String value = DwcaTsvHeaders.col(cols, header, names);
+            if (value != null) {
+                return value;
+            }
+        }
+        if (fallbackIndex >= 0 && fallbackIndex < cols.length) {
+            return emptyToNull(cols[fallbackIndex]);
+        }
+        return null;
+    }
+
+    private static String nz(String value) {
+        return value == null ? "" : value;
+    }
+
+    private Long lookupKingdomId(String kingdomLower) {
+        List<Long> ids = jdbcTemplate.query(
+                """
+                SELECT id FROM taxon
+                WHERE taxon_rank = 'KINGDOM' AND LOWER(scientific_name) = ?
+                """,
+                (rs, rowNum) -> rs.getLong(1),
+                kingdomLower);
+        return ids.isEmpty() ? null : ids.getFirst();
     }
 
     private Long lookupExternalId(String externalId) {
@@ -662,22 +772,23 @@ public class ColDwcaImporter {
                 (org.springframework.jdbc.core.RowCallbackHandler) rs -> existingExt.add(rs.getString(1)),
                 SOURCE_COL);
         AtomicInteger count = new AtomicInteger();
-        int offset = 0;
+        String afterExternalId = "";
         while (true) {
             List<Object[]> page = jdbcTemplate.query(
                     """
                     SELECT synonym_external_id, accepted_external_id, scientific_name
                     FROM import_col_synonym
+                    WHERE synonym_external_id > ?
                     ORDER BY synonym_external_id
-                    LIMIT ? OFFSET ?
+                    LIMIT ?
                     """,
                     (rs, rowNum) -> new Object[] {rs.getString(1), rs.getString(2), rs.getString(3)},
-                    batchSize,
-                    offset);
+                    afterExternalId,
+                    batchSize);
             if (page.isEmpty()) {
                 break;
             }
-            offset += page.size();
+            afterExternalId = (String) page.getLast()[0];
             List<Object[]> inserts = new ArrayList<>();
             for (Object[] row : page) {
                 String synExt = (String) row[0];
@@ -898,6 +1009,20 @@ public class ColDwcaImporter {
 
     private void clearTaxonData() {
         log.info("Clearing existing taxon/media/i18n/synonym/distribution data before import");
+        if (isMySql()) {
+            jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=0");
+            try {
+                jdbcTemplate.execute("TRUNCATE TABLE taxon_media");
+                jdbcTemplate.execute("TRUNCATE TABLE taxon_distribution");
+                jdbcTemplate.execute("TRUNCATE TABLE taxon_i18n");
+                jdbcTemplate.execute("TRUNCATE TABLE taxon_synonym");
+                jdbcTemplate.execute("TRUNCATE TABLE taxon");
+            } finally {
+                jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=1");
+            }
+            return;
+        }
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
         jdbcTemplate.update("DELETE FROM taxon_media");
         jdbcTemplate.update("DELETE FROM taxon_distribution");
         jdbcTemplate.update("DELETE FROM taxon_i18n");
@@ -905,12 +1030,90 @@ public class ColDwcaImporter {
         jdbcTemplate.update("UPDATE taxon SET simple_parent_id = NULL");
         jdbcTemplate.update("UPDATE taxon SET parent_id = NULL");
         jdbcTemplate.update("DELETE FROM taxon");
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
     }
 
     private void clearStaging() {
+        if (isMySql()) {
+            jdbcTemplate.execute("TRUNCATE TABLE import_col_synonym");
+            jdbcTemplate.execute("TRUNCATE TABLE import_col_taxon");
+            jdbcTemplate.execute("TRUNCATE TABLE import_col_edge");
+            return;
+        }
         jdbcTemplate.update("DELETE FROM import_col_synonym");
         jdbcTemplate.update("DELETE FROM import_col_taxon");
         jdbcTemplate.update("DELETE FROM import_col_edge");
+    }
+
+    private boolean isMySql() {
+        if (mysql != null) {
+            return mysql;
+        }
+        try {
+            var dataSource = jdbcTemplate.getDataSource();
+            if (dataSource == null) {
+                mysql = false;
+                return false;
+            }
+            try (var connection = dataSource.getConnection()) {
+                String product = connection.getMetaData().getDatabaseProductName();
+                mysql = product != null && product.toLowerCase(Locale.ROOT).contains("mysql");
+            }
+        } catch (SQLException ex) {
+            mysql = false;
+        }
+        return mysql;
+    }
+
+    private boolean suspendMysqlFulltextIndexes() {
+        if (!isMySql()) {
+            return false;
+        }
+        boolean dropped = false;
+        dropped |= dropMysqlIndexIfPresent("taxon", "ft_taxon_scientific_name");
+        dropped |= dropMysqlIndexIfPresent("taxon_i18n", "ft_taxon_i18n_common_name");
+        dropped |= dropMysqlIndexIfPresent("taxon_synonym", "ft_taxon_synonym_name");
+        if (dropped) {
+            log.info("Suspended MySQL FULLTEXT indexes for import");
+        }
+        return dropped;
+    }
+
+    private void restoreMysqlFulltextIndexes() {
+        if (!isMySql()) {
+            return;
+        }
+        addMysqlFulltextIfMissing("taxon", "ft_taxon_scientific_name", "scientific_name");
+        addMysqlFulltextIfMissing("taxon_i18n", "ft_taxon_i18n_common_name", "common_name");
+        addMysqlFulltextIfMissing("taxon_synonym", "ft_taxon_synonym_name", "scientific_name");
+        log.info("Restored MySQL FULLTEXT indexes after import");
+    }
+
+    private boolean dropMysqlIndexIfPresent(String table, String indexName) {
+        if (mysqlIndexCount(table, indexName) == 0) {
+            return false;
+        }
+        jdbcTemplate.execute("ALTER TABLE " + table + " DROP INDEX " + indexName);
+        return true;
+    }
+
+    private void addMysqlFulltextIfMissing(String table, String indexName, String column) {
+        if (mysqlIndexCount(table, indexName) > 0) {
+            return;
+        }
+        jdbcTemplate.execute("ALTER TABLE " + table + " ADD FULLTEXT INDEX " + indexName + " (" + column + ")");
+    }
+
+    private int mysqlIndexCount(String table, String indexName) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+                """,
+                Integer.class,
+                table,
+                indexName);
+        return count == null ? 0 : count;
     }
 
     private boolean stagingHasTaxa() {

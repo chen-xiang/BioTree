@@ -2,14 +2,15 @@
 setlocal EnableExtensions
 
 rem =============================================================================
-rem BioTree - 常用脚本索引（仅打印帮助）
+rem BioTree - Script index (prints help only)
 rem Author: chen-xiang
 rem Created: 2026-08-31
-rem Updated: 2026-08-31 同步列出 Linux 脚本
-rem Updated: 2026-09-01 说明导入与 Web 启动分离
-rem Updated: 2026-09-01 启动脚本加 start- 前缀
-rem Updated: 2026-09-01 结束后 pause，避免双击窗口立刻关闭
-rem 用法：scripts\help.bat
+rem Updated: 2026-08-31 Also list Linux scripts
+rem Updated: 2026-09-01 Document that import is separate from the web process
+rem Updated: 2026-09-01 Prefix launcher scripts with start-
+rem Updated: 2026-09-01 Pause at the end so a double-clicked window stays open
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: scripts\help.bat
 rem =============================================================================
 
 set "EXITCODE=0"

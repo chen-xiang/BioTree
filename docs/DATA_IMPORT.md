@@ -1,6 +1,6 @@
 # 真实分类数据导入（Catalogue of Life）
 
-本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入动物界与植物界分类数据及俗名。
+本文说明如何从 **Catalogue of Life（CoL）DwC-A** 导入分类数据及俗名。默认覆盖 CoL 七界。
 
 > **演进**：默认 **`app.import.rank-mode=full`** 入库完整阶元（含中间级）；可设 `legacy7` 回退旧行为。公开 API / 浏览默认 `view=simple`（七级投影），可切 `view=full`。另可导入 Description / Distribution / Media 扩展与命名学字段（见 [FULL_TAXONOMY_PLAN.md](./FULL_TAXONOMY_PLAN.md)）。导入入口为独立 `gradle importCol`（非 Web），与 `bootRun` / `start-server-dev` 分离。
 
@@ -22,7 +22,7 @@ curl -L -o data/import/col_latest_dwca.zip \
 
 | 项 | 说明 |
 | --- | --- |
-| 过滤 | 仅 `taxonomicStatus=accepted`，且 `kingdom` 为配置的界（默认 Animalia、Plantae） |
+| 过滤 | 仅 `taxonomicStatus=accepted`，且 `kingdom` 为配置的界（默认 CoL 七界：Animalia、Archaea、Bacteria、Chromista、Fungi、Plantae、Protozoa） |
 | 等级 | 默认完整阶元（亚门/亚科/亚属/亚种等）；`rank-mode=legacy7` 时仅七级 |
 | 父级 | full：按真实 `parentNameUsageID` 挂接；legacy7：中间级上溯到已入库七级 |
 | 学名 | 种/种下用属名+加词拼规范名；写入命名人、原文名、`namePublishedIn`、命名法字段（有则） |
@@ -42,7 +42,7 @@ curl -L -o data/import/col_latest_dwca.zip \
 
 前置：MySQL 8 已创建库 `biotree`，账号与 `application.yml` 一致。
 
-### 全量（动物界 + 植物界）
+### 全量（CoL 七界）
 
 **Windows（推荐）：** 双击或在仓库根目录执行：
 
@@ -117,7 +117,7 @@ cd backend
 - 写入约 1414 个分类节点（界 2 / 门 46 / 纲 166 / 目科属种各 300）
 - 写入约 175 条中英俗名
 
-公开 API `GET /api/taxa/children` 可返回 Animalia / Plantae（默认 `view=simple` 为七级投影）。
+公开 API `GET /api/taxa/children` 可返回已导入的界（默认 `view=simple` 为七级投影）。
 
 全量将 `max-per-rank=0` + `rank-mode=full`，节点量显著高于仅七级，请预留磁盘与导入时间。
 
@@ -139,11 +139,14 @@ cd backend
 - `dwca-path`：zip 路径  
 - `replace`：是否先清空分类数据  
 - `resume`：是否断点续跑  
-- `kingdoms`：界过滤列表  
+- `kingdoms`：界过滤列表。默认含传统七界名，以及现行 CoL 原核界（Bacillati、Pseudomonadati、Thermoproteati 等）。当前 DwC-A 的 `kingdom` 列已无 Bacteria/Archaea，不配新名则细菌/古菌不会入库。异名行常空着界名，导入器按 `acceptedNameUsageID` 收集，不再要求界名。  
 - `max-per-rank`：每级上限，`0` 不限制  
 - `rank-mode`：`full`（完整阶元）或 `legacy7`  
 - `import-vernaculars` / `import-synonyms`：俗名与异名  
-- `import-descriptions` / `import-distributions` / `import-media`：DwC 扩展（缺文件则跳过）  
+- `import-descriptions` / `import-distributions` / `import-media`：DwC 扩展（缺文件则跳过）
+- `commit-batch-size`：每批落库条数（默认 2000）。MySQL 连接串需带 `rewriteBatchedStatements=true` 才会把 batch 合成少数字。
+
+落库按 `(taxon_rank, external_id)` **keyset** 分页，不用 `OFFSET`（否则种级百万行会越跑越慢）。`replace` 在 MySQL 上用 `TRUNCATE`。导入期间会暂时去掉 FULLTEXT，结束或失败后重建。七界全量仍要较长时间，但不应再出现「种每小时只进五万且越来越慢」。  
 
 ## 5. 验证
 

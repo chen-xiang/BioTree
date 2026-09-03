@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 从离线 openapi.yaml 生成前端类型 schema.d.ts
+# BioTree - Generate frontend schema.d.ts from offline openapi.yaml
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/openapi-generate.sh
-# 可选：./scripts/openapi-generate.sh live  （需后端已启动）
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/openapi-generate.sh
+# Optional: ./scripts/openapi-generate.sh live  (backend must be running)
 # =============================================================================
 set -euo pipefail
 

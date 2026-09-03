@@ -44,7 +44,7 @@ scripts/    开发 / 导入 / 统计脚本（.bat + .sh）
 
 - 公开浏览：懒加载分类树、搜索（前缀 / MySQL FULLTEXT）、详情、异名、locale 回退、`/browse/:id`
 - 管理端：登录 Session、CSRF、分类 CRUD / 移动、配图上传（Local 或阿里云 OSS）
-- 导入：Catalogue of Life DwC-A（动物界/植物界七级 + 俗名 + 异名）、批写与断点续跑
+- 导入：Catalogue of Life DwC-A（七界完整阶元 + 俗名 + 异名）、批写与断点续跑
 - 前端：深浅色 Token、基础设计系统组件、虚拟列表、Markdown 介绍
 
 ## 本地运行

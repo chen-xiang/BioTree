@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - pause-exit.sh 行为测试（嵌套 / CI 不 pause）
+# BioTree - pause-exit.sh behavior test (nested / CI skip pause)
 # Author: chen-xiang
 # Created: 2026-09-01
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
 # =============================================================================
 set -euo pipefail
 

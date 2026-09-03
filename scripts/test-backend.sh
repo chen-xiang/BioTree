@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BioTree - 后端单元/集成测试
+# BioTree - Backend unit and integration tests
 # Author: chen-xiang
 # Created: 2026-08-31
-# 用法：./scripts/test-backend.sh
+# Updated: 2026-09-03 English comments only, avoid cmd mojibake
+# Usage: ./scripts/test-backend.sh
 # =============================================================================
 set -euo pipefail
 

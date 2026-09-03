@@ -354,6 +354,7 @@ components:
         hasChildren: { type: boolean }
         rankRaw: { type: string, nullable: true }
         directChildCount: { type: integer, description: Physical direct child count }
+        placeholder: { type: boolean, description: Simple-view unclassified bucket }
     TaxonBreadcrumb:
       type: object
       required: [id, rank, scientificName]
@@ -421,6 +422,7 @@ components:
           items: { $ref: '#/components/schemas/TaxonDistribution' }
         directChildCount: { type: integer }
         nearestSimpleAncestorId: { type: integer, format: int64, nullable: true }
+        placeholder: { type: boolean, description: Simple-view unclassified bucket }
     TaxonVernacular:
       type: object
       required: [locale, commonName, preferred]

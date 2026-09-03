@@ -1,10 +1,11 @@
 @echo off
 rem =============================================================================
-rem BioTree - 顶层 bat 结束时 pause，避免双击窗口立刻关闭
+rem BioTree - Pause when a top-level bat finishes so a double-clicked window stays open
 rem Author: chen-xiang
 rem Created: 2026-09-01
-rem 用法：call "%~dp0finish.bat" %EXITCODE%
-rem 说明：若调用方设置了 BIOTREE_NESTED=1，则跳过 pause（供 call 子脚本）
+rem Updated: 2026-09-03 English comments only, avoid cmd mojibake
+rem Usage: call "%~dp0finish.bat" %EXITCODE%
+rem Note: skip pause when the caller sets BIOTREE_NESTED=1 (nested call)
 rem =============================================================================
 
 set "CODE=%~1"

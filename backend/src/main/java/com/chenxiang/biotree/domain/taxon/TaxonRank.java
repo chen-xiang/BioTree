@@ -4,11 +4,13 @@
  * Author: chen-xiang
  * Created: 2026-08-31
  * Updated: 2026-08-31 扩展中间级与 rankOrder（完整阶元方案 R1）
+ * Updated: 2026-09-03 林奈七级有序列表与相邻阶元查询
  */
 package com.chenxiang.biotree.domain.taxon;
 
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -53,6 +55,63 @@ public enum TaxonRank {
 
     public static final Set<TaxonRank> LINNAEAN_SEVEN = Collections.unmodifiableSet(
             EnumSet.of(KINGDOM, PHYLUM, CLASS, ORDER, FAMILY, GENUS, SPECIES));
+
+    /** 林奈七级，从界到种。 */
+    public static final List<TaxonRank> LINNAEAN_SEVEN_ORDER = List.of(
+            KINGDOM, PHYLUM, CLASS, ORDER, FAMILY, GENUS, SPECIES);
+
+    /**
+     * 下一档林奈七级；{@code null} 视为根，下一档为界。种之后为空。
+     */
+    public static Optional<TaxonRank> nextLinnaean(TaxonRank rank) {
+        int order = rank == null ? Integer.MIN_VALUE : rank.rankOrder;
+        for (TaxonRank candidate : LINNAEAN_SEVEN_ORDER) {
+            if (candidate.rankOrder > order) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 上一档林奈七级。
+     */
+    public static Optional<TaxonRank> previousLinnaean(TaxonRank rank) {
+        if (rank == null) {
+            return Optional.empty();
+        }
+        TaxonRank previous = null;
+        for (TaxonRank candidate : LINNAEAN_SEVEN_ORDER) {
+            if (candidate.rankOrder >= rank.rankOrder) {
+                return Optional.ofNullable(previous);
+            }
+            previous = candidate;
+        }
+        return Optional.ofNullable(previous);
+    }
+
+    /**
+     * 严格深于给定阶元的林奈七级（用于缺阶收纳）。
+     */
+    public static List<TaxonRank> linnaeanDeeperThan(TaxonRank rank) {
+        if (rank == null) {
+            return LINNAEAN_SEVEN_ORDER;
+        }
+        return LINNAEAN_SEVEN_ORDER.stream().filter(r -> r.rankOrder > rank.rankOrder).toList();
+    }
+
+    /**
+     * 两个林奈阶元之间的缺档（不含两端）。
+     */
+    public static List<TaxonRank> linnaeanBetweenExclusive(TaxonRank from, TaxonRank to) {
+        if (to == null) {
+            return List.of();
+        }
+        int low = from == null ? Integer.MIN_VALUE : from.rankOrder;
+        return LINNAEAN_SEVEN_ORDER.stream()
+                .filter(r -> r.rankOrder > low && r.rankOrder < to.rankOrder)
+                .toList();
+    }
 
     /**
      * 将 DwC taxonRank 原文映射为规范枚举；无法识别时为 OTHER。
